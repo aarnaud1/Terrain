@@ -23,6 +23,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 
+#include <vkWrappers/wrappers.hpp>
+
 int main(int /*argc*/, char** /*argv*/)
 {
     const float refDist = 10.0f;

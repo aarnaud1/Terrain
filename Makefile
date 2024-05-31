@@ -16,13 +16,18 @@
 CXX       := g++ -W -Wall -Wextra -std=c++17
 CXX_FLAGS := -O3 -g --pedantic -ffast-math -ftree-vectorize -march=native -mavx2 -fopenmp
 DEFINES   := -DGLM_FORCE_RADIANS
-IFLAGS    := -I./include -I/usr/include/opencv4
-LFLAGS    := -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_imgproc -ltinyply
+IFLAGS    := -I./include -I./Vulkan/include/ -I/usr/include/opencv4
+LFLAGS    := -L./Vulkan/output/lib -lVkWrappers \
+             -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_imgproc -ltinyply
 
-all: main
+all: submodules main
 
 main : main.cpp src/TerrainGenerator.cpp src/ValueNoiseGenerator.cpp
 		$(CXX) $(DEFINES) $(CXX_FLAGS) -o $@ $(IFLAGS) $^ $(LFLAGS)
 
+submodules:
+	make -C Vulkan lib -j8
+
 clean:
 	rm -f main
+	make -C Vulkan clean
