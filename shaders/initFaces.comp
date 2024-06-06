@@ -1,0 +1,54 @@
+/*
+ * Copyright (C) 2024 Adrien ARNAUD
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#version 450 core
+
+layout(local_size_x_id = 0) in;
+
+layout(binding = 0) buffer writeonly Faces { uint faces[]; };
+
+layout(push_constant) uniform PushConstants
+{
+    uint dimX;
+    uint dimY;
+};
+
+void main()
+{
+    const uint sizeX = dimX + 1;
+    const uint sizeY = dimY + 1;
+
+    for(uint idx = gl_GlobalInvocationID.x; idx < dimX * dimX;
+        idx += gl_WorkGroupSize.x * gl_NumWorkGroups.x)
+    {
+        const uint i = idx / dimX;
+        const uint j = idx % dimX;
+
+        const uint baseIndex = i * sizeX + j;
+        const uvec3 face0 = uvec3(baseIndex, baseIndex + sizeX + 1, baseIndex + sizeX);
+        const uvec3 face1 = uvec3(baseIndex, baseIndex + 1, baseIndex + sizeX + 1);
+
+        const uint faceOffset = 2 * (i * dimX + j);
+        faces[3 * faceOffset + 0] = face0.x;
+        faces[3 * faceOffset + 1] = face0.y;
+        faces[3 * faceOffset + 2] = face0.z;
+
+        faces[3 * faceOffset + 3] = face1.x;
+        faces[3 * faceOffset + 4] = face1.y;
+        faces[3 * faceOffset + 5] = face1.z;
+    }
+}

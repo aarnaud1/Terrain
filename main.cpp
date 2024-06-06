@@ -15,31 +15,158 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "TerrainGenerator.hpp"
+#include "TerrainEngine.hpp"
 
+#include <GLFW/glfw3.h>
 #include <cstdio>
-#include <cstdlib>
-#include <memory>
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
-#include <vkWrappers/wrappers.hpp>
+static void mainLoop(GLFWwindow* window, cg::TerrainEngine* engine);
+
+static void errorCallback(int error, const char* msg);
+static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
+
+float offsetX = 0.0f;
+float offsetY = 0.0f;
+float theta = 0.0f;
 
 int main(int /*argc*/, char** /*argv*/)
 {
-    const float refDist = 10.0f;
-    const float baseResolution = 0.01f;
-    const float baseDim = refDist / baseResolution;
-    const float zFactor = 0.5f;
+    const uint32_t initWidth = 1024;
+    const uint32_t initHeight = 768;
 
-    cg::TerrainGenerator generator{};
-    generator.setBaseResolution(baseResolution, baseResolution, zFactor);
-    generator.setHeightWaveLength(0.2f * baseDim);
-    generator.setMoistureWaveLength(0.5f * baseDim);
+    if(!glfwInit())
+    {
+        fprintf(stderr, "Error initializing GLFW\n");
+        return EXIT_FAILURE;
+    }
 
-    generator.generateTile(glm::vec2{0, 0}, 10.0f, 45.0f, 0.0f);
-    generator.generateTile(glm::vec2{0, 0}, 5.0f, 45.0f, 30.0f);
-    generator.generateTile(glm::vec2{0, 0}, 5.0f, 45.0f, 60.0f);
+    if(!glfwVulkanSupported())
+    {
+        fprintf(stderr, "Vulkan not supported\n");
+        return EXIT_FAILURE;
+    }
+    glfwSetErrorCallback(errorCallback);
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    GLFWwindow* window = glfwCreateWindow(initWidth, initHeight, "Terrain", nullptr, nullptr);
+    if(!window)
+    {
+        fprintf(stderr, "Error creating window, terminating\n");
+        return EXIT_FAILURE;
+    }
+
+    glfwSetKeyCallback(window, keyCallback);
+    // glfwSetCursorPosCallback(window, mouseCallback);
+
+    std::unique_ptr<cg::TerrainEngine> engine(new cg::TerrainEngine(window, initWidth, initHeight));
+    engine->setRefDistance(30.0f);
+    engine->setBaseResolution(0.05f);
+    engine->setFarDistance(30.0f);
+    engine->setFov(45.0f);
+    engine->prepare();
+
+    fprintf(stdout, "Starting the main loop\n");
+    mainLoop(window, engine.get());
+    engine.reset(nullptr); // Clear all Vulkan resources
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
 
     return EXIT_SUCCESS;
 }
+
+// -------------------------------------------------------------------------------------------------
+
+bool incrementX = false;
+bool incrementY = false;
+bool decrementX = false;
+bool decrementY = false;
+bool incrementTheta = false;
+
+void mainLoop(GLFWwindow* window, cg::TerrainEngine* engine)
+{
+    engine->renderFrame(true);
+    while(!glfwWindowShouldClose(window))
+    {
+        glfwPollEvents();
+        if(incrementX)
+        {
+            offsetX += 0.1f;
+        }
+        if(incrementY)
+        {
+            offsetY += 0.1f;
+        }
+
+        if(decrementX)
+        {
+            offsetX -= 0.1f;
+        }
+        if(decrementY)
+        {
+            offsetY -= 0.1f;
+        }
+
+        engine->setOffset(offsetX, offsetY, theta);
+        engine->renderFrame(incrementX || incrementY || decrementX || decrementY || incrementTheta);
+
+        if(incrementTheta)
+        {
+            incrementTheta = false;
+        }
+    }
+}
+
+void errorCallback(int, const char* msg) { fprintf(stderr, "GLFW error : %s\n", msg); }
+
+void keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)
+{
+    if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
+
+    if(key == GLFW_KEY_RIGHT && (action == GLFW_PRESS))
+    {
+        incrementX = true;
+    }
+    if(key == GLFW_KEY_RIGHT && (action == GLFW_RELEASE))
+    {
+        incrementX = false;
+    }
+
+    if(key == GLFW_KEY_LEFT && (action == GLFW_PRESS))
+    {
+        decrementX = true;
+    }
+    if(key == GLFW_KEY_LEFT && (action == GLFW_RELEASE))
+    {
+        decrementX = false;
+    }
+
+    if(key == GLFW_KEY_UP && (action == GLFW_PRESS))
+    {
+        incrementY = true;
+    }
+    if(key == GLFW_KEY_UP && (action == GLFW_RELEASE))
+    {
+        incrementY = false;
+    }
+
+    if(key == GLFW_KEY_DOWN && (action == GLFW_PRESS))
+    {
+        decrementY = true;
+    }
+    if(key == GLFW_KEY_DOWN && (action == GLFW_RELEASE))
+    {
+        decrementY = false;
+    }
+}
+
+// void mouseCallback(GLFWwindow* window, double xpos, double ypos) 
+// {
+//     const float thetaScale = xPos - 
+// }

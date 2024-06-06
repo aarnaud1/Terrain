@@ -1,0 +1,78 @@
+/*
+ * Copyright (C) 2024 Adrien ARNAUD
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#version 450 core
+
+layout(local_size_x_id = 0) in;
+
+layout(binding = 0) buffer restrict readonly HeightMap { float heightMap[]; };
+layout(binding = 1) buffer restrict readonly MoistureMap { float moistureMap[]; };
+layout(binding = 2) buffer restrict writeonly Vertices { float vertices[]; };
+layout(binding = 3) buffer restrict writeonly Normals { float normals[]; };
+
+layout(push_constant) uniform PushConstants
+{
+    uint sizeX;
+    uint sizeY;
+    float triangleRes;
+    float zScale;
+};
+
+vec3 getVertex(const int x, const int y, const int idx)
+{
+    if(x >= 0 && x < sizeX && y >= 0 && y < sizeY)
+    {
+        const float x0 = triangleRes * float(x - int(sizeX / 2));
+        const float y0 = triangleRes * float(y /*- int(sizeY / 2)*/);
+        const float z = heightMap[idx] * zScale;
+
+        return vec3(x0, y0, z);
+    }
+    return vec3(0.0f, 0.0f, 0.0f);
+}
+
+void main()
+{
+    for(uint idx = gl_GlobalInvocationID.x; idx < sizeX * sizeY;
+        idx += gl_WorkGroupSize.x * gl_NumWorkGroups.x)
+    {
+        const int y = int(idx / sizeX);
+        const int x = int(idx % sizeX);
+
+        const vec3 p = getVertex(x, y, int(idx));
+        const vec3 px0 = getVertex(x - 1, y, int(idx - 1)) - p;
+        const vec3 px1 = getVertex(x + 1, y, int(idx + 1)) - p;
+
+        const vec3 py0 = getVertex(x, y - 1, int(idx - sizeX)) - p;
+        const vec3 py1 = getVertex(x, y + 1, int(idx + sizeX)) - p;
+
+        const vec3 n0 = cross(px1, py1);
+        const vec3 n1 = cross(py1, px0);
+        const vec3 n2 = cross(px0, py0);
+        const vec3 n3 = cross(py0, px1);
+
+        const vec3 n = normalize(n0 + n1 + n2 + n3);
+
+        vertices[3 * idx + 0] = p.x;
+        vertices[3 * idx + 1] = p.y;
+        vertices[3 * idx + 2] = p.z;
+
+        normals[3 * idx + 0] = n.x;
+        normals[3 * idx + 1] = n.y;
+        normals[3 * idx + 2] = n.z;
+    }
+}
