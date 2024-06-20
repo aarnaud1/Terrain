@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "TerrainGeneratorGPU.hpp"
+
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <vkWrappers/wrappers.hpp>
@@ -77,6 +79,8 @@ class TerrainEngine
     uint32_t sizeY_{0};
 
     bool storageInitialized_{false};
+
+    TerrainGeneratorGPU generator_;
 
     std::unique_ptr<vk::Memory> vertexMemory_{nullptr};
     std::vector<vk::Buffer<glm::vec3>*> vertices_{nullptr};

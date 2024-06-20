@@ -42,7 +42,12 @@ namespace cg
 {
 TerrainEngine::TerrainEngine(
     GLFWwindow* window, const uint32_t initWidth, const uint32_t initHeight)
-    : window_{window}, instance_{window}, device_{instance_}, width_{initWidth}, height_{initHeight}
+    : window_{window}
+    , instance_{window}
+    , device_{instance_}
+    , width_{initWidth}
+    , height_{initHeight}
+    , generator_{device_}
 {}
 
 void TerrainEngine::prepare()
@@ -306,7 +311,7 @@ void TerrainEngine::initFaces(const uint32_t imageCount)
                 initFacesLayout_,
                 VK_SHADER_STAGE_COMPUTE_BIT,
                 initFacesConstantsOffset_,
-                &initFacesConstants_)
+                initFacesConstants_)
             .dispatch(vk::divUp(halfFaceCount, maxComputeBlockSize))
             .end();
 
@@ -522,7 +527,7 @@ void TerrainEngine::genTerrain(const uint32_t id)
             computeMapsLayout_,
             VK_SHADER_STAGE_COMPUTE_BIT,
             computeMapConstantsOffset_,
-            &computeMapConstants_)
+            computeMapConstants_)
         .dispatch(vk::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
         .bufferMemoryBarriers(
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -538,7 +543,7 @@ void TerrainEngine::genTerrain(const uint32_t id)
             computeColorsLayout_,
             VK_SHADER_STAGE_COMPUTE_BIT,
             computeColorsConstantsOffset_,
-            &computeColorsConstants_)
+            computeColorsConstants_)
         .dispatch(vk::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
         // Compute vertices
         .bindComputePipeline(computeVerticesPipeline_)
@@ -547,7 +552,7 @@ void TerrainEngine::genTerrain(const uint32_t id)
             computeVerticesLayout_,
             VK_SHADER_STAGE_COMPUTE_BIT,
             computeVerticesConstantsOffset_,
-            &computeVerticesConstants_)
+            computeVerticesConstants_)
         .dispatch(vk::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
 #ifdef DEBUG_BUFFERS
         .bufferMemoryBarriers(

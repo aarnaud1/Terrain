@@ -62,7 +62,7 @@ int main(int /*argc*/, char** /*argv*/)
     // glfwSetCursorPosCallback(window, mouseCallback);
 
     std::unique_ptr<cg::TerrainEngine> engine(new cg::TerrainEngine(window, initWidth, initHeight));
-    engine->setRefDistance(30.0f);
+    engine->setRefDistance(20.0f);
     engine->setBaseResolution(0.05f);
     engine->setFarDistance(30.0f);
     engine->setFov(45.0f);

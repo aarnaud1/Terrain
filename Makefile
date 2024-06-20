@@ -25,9 +25,15 @@ SHADERS_SPV := $(patsubst shaders/%.comp,output/spv/%_comp.spv,$(wildcard shader
                $(patsubst shaders/%.vert,output/spv/%_vert.spv,$(wildcard shaders/*.vert)) \
 			   $(patsubst shaders/%.frag,output/spv/%_frag.spv,$(wildcard shaders/*.frag))
 
+SRC_FILES := main.cpp \
+             src/TerrainGenerator.cpp \
+             src/ValueNoiseGenerator.cpp \
+	         src/TerrainEngine.cpp \
+	         src/TerrainGeneratorGPU.cpp
+
 all: dir $(SHADERS_SPV) submodules main
 
-main : main.cpp src/TerrainGenerator.cpp src/ValueNoiseGenerator.cpp src/TerrainEngine.cpp
+main : $(SRC_FILES)
 		$(CXX) $(DEFINES) $(CXX_FLAGS) -o $@ $(IFLAGS) $^ $(LFLAGS)
 
 output/spv/%_comp.spv: shaders/%.comp
