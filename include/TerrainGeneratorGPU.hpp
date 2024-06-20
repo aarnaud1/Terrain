@@ -21,7 +21,7 @@
 #include <glm/glm.hpp>
 #include <vkWrappers/wrappers.hpp>
 
-#define DEBUG_TERRAIN
+// #define DEBUG_TERRAIN
 
 namespace cg
 {
@@ -52,8 +52,14 @@ class TerrainGeneratorGPU
     auto& colors() { return *colors_; }
     const auto& colors() const { return *colors_; }
 
+    auto& faces() { return *faces_; }
+    const auto& faces() const { return *faces_; }
+
+    uint32_t vertexCount() const { return sizeX_ * sizeY_; }
+    uint32_t faceCount() const { return 2 * (sizeX_ - 1) * (sizeY_ - 1); }
+
   private:
-    static constexpr uint32_t maxComputeBlockSize = 256;
+    static constexpr uint32_t maxComputeBlockSize = 1024;
 
     vk::Device* device_{nullptr};
 
@@ -130,5 +136,7 @@ class TerrainGeneratorGPU
     vk::ComputeProgram computeVerticesProgram_;
 
     bool allocated_{false};
+
+    void initFaces();
 };
 } // namespace cg

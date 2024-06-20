@@ -44,7 +44,7 @@ TerrainGeneratorGPU::TerrainGeneratorGPU(vk::Device& device)
     , initFacesProgram_{device, "output/spv/initFaces_comp.spv"}
     , computeMapsProgram_{device, "output/spv/computeMaps_comp.spv"}
     , computeColorsProgram_{device, "output/spv/computeColors_comp.spv"}
-    , computeVerticesProgram_{device, "output/dpv/computeVertices_comp.spv"}
+    , computeVerticesProgram_{device, "output/spv/computeVertices_comp.spv"}
 {}
 
 void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY)
@@ -155,6 +155,8 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
     computeCommandPool_.init(*device_);
 
     allocated_ = true;
+
+    initFaces();
 }
 
 void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, const float theta)
@@ -276,6 +278,21 @@ void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, con
     const auto stop = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
     fprintf(stdout, "[DEBUG] Generation took : %f [ms]\n", (double) elapsed.count() / 1000.0f);
+}
+
+void TerrainGeneratorGPU::initFaces()
+{
+    const uint32_t halfFaceCount = (sizeX_ - 1) * (sizeY_ - 1);
+    initFacesConstants_.dimX = sizeX_ - 1;
+    initFacesConstants_.dimY = sizeY_ - 1;
+
+    auto cmdBuffer = computeCommandPool_.createCommandBuffer();
+    cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+        .bindComputeProgram(initFacesProgram_, initFacesConstants_)
+        .dispatch(vk::divUp(halfFaceCount, maxComputeBlockSize))
+        .end();
+
+    computeQueue_.submit(cmdBuffer).waitIdle();
 }
 } // namespace cg
 

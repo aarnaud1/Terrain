@@ -23,8 +23,6 @@
 #include <glm/glm.hpp>
 #include <vkWrappers/wrappers.hpp>
 
-// #define DEBUG_BUFFERS
-
 namespace cg
 {
 class TerrainEngine
@@ -41,8 +39,12 @@ class TerrainEngine
 
     ~TerrainEngine() { device_.waitIdle(); }
 
-    void setRefDistance(const float dist) { refDist_ = dist; }
-    void setBaseResolution(const float res) { baseResolution_ = res; }
+    void setRefDistance(const float dist) { generator_.setRefDistance(dist); }
+    void setBaseResolution(const float res)
+    {
+        baseResolution_ = res;
+        generator_.setBaseResolution(res);
+    }
     void setFarDistance(const float dist) { farDistance_ = dist; }
     void setFov(const float fov) { fov_ = fov; }
 
@@ -71,28 +73,13 @@ class TerrainEngine
     uint32_t height_{0};
 
     // Terrain generation data
-    float refDist_{1.0f};
     float baseResolution_{1.0f};
     float farDistance_{1.0f};
     float fov_{45.0f};
-    uint32_t sizeX_{0};
-    uint32_t sizeY_{0};
 
     bool storageInitialized_{false};
 
     TerrainGeneratorGPU generator_;
-
-    std::unique_ptr<vk::Memory> vertexMemory_{nullptr};
-    std::vector<vk::Buffer<glm::vec3>*> vertices_{nullptr};
-    std::vector<vk::Buffer<glm::vec3>*> normals_{nullptr};
-    std::vector<vk::Buffer<glm::vec4>*> colors_{nullptr};
-
-    std::unique_ptr<vk::Memory> facesMemory_{nullptr};
-    std::vector<vk::Buffer<glm::uvec3>*> faces_{nullptr};
-
-    std::unique_ptr<vk::Memory> mapsMemory_{nullptr};
-    vk::Buffer<float>* heightMap_{nullptr};
-    vk::Buffer<float>* moistureMap_{nullptr};
 
     struct MatrixBlock
     {
@@ -104,86 +91,13 @@ class TerrainEngine
     std::vector<vk::Buffer<MatrixBlock>*> uboBuffers_{};
 
     // Command pools
-    vk::CommandPool<vk::QueueFamilyType::COMPUTE> computeCommandPool_{};
     vk::CommandPool<vk::QueueFamilyType::GRAPHICS> graphicsCommandPool_{};
 
     // Device queues
-    vk::Queue<vk::QueueFamilyType::COMPUTE> computeQueue_{};
     vk::Queue<vk::QueueFamilyType::GRAPHICS> graphicsQueue_{};
     vk::Queue<vk::QueueFamilyType::PRESENT> presentQueue_{};
 
     std::vector<vk::CommandBuffer<vk::QueueFamilyType::GRAPHICS>> graphicsCommandBuffers_{};
-
-#ifdef DEBUG_BUFFERS
-    std::unique_ptr<vk::Memory> verticesStagingMem_{nullptr};
-    vk::Buffer<glm::vec3>* verticesStaging_{nullptr};
-
-    std::unique_ptr<vk::Memory> normalsStagingMem_{nullptr};
-    vk::Buffer<glm::vec3>* normalsStaging_{nullptr};
-
-    std::unique_ptr<vk::Memory> colorStagingMem_{nullptr};
-    vk::Buffer<glm::vec4>* colorsStaging_{nullptr};
-
-    std::unique_ptr<vk::Memory> facesStagingMem_{nullptr};
-    vk::Buffer<glm::uvec3>* facesStaging_{nullptr};
-#endif
-
-    // Compute pipelines
-    // Faces initializaton
-    struct
-    {
-        uint32_t dimX;
-        uint32_t dimY;
-    } initFacesConstants_;
-    uint32_t initFacesConstantsOffset_;
-
-    vk::ComputePipeline initFacesPipeline_{};
-    vk::PipelineLayout initFacesLayout_{};
-    std::vector<vk::DescriptorPool> initFacesPools_{};
-
-    // Maps creation
-    struct
-    {
-        uint32_t sizeX;
-        uint32_t sizeY;
-        uint32_t heightOctaves;
-        uint32_t moistureOctaves;
-        float heightWaveLength;
-        float moistureWaveLength;
-        float offX;
-        float offY;
-        float theta;
-    } computeMapConstants_;
-    uint32_t computeMapConstantsOffset_{0};
-
-    vk::ComputePipeline computeMapsPipeline_{};
-    vk::PipelineLayout computeMapsLayout_{};
-    std::vector<vk::DescriptorPool> computeMapsPools_{};
-
-    // Colors computation
-    struct
-    {
-        uint32_t pointCount;
-    } computeColorsConstants_;
-    uint32_t computeColorsConstantsOffset_{0};
-
-    vk::ComputePipeline computeColorsPipeline_{};
-    vk::PipelineLayout computeColorsLayout_{};
-    std::vector<vk::DescriptorPool> computeColorsPools_{};
-
-    // Vertices computation
-    struct
-    {
-        uint32_t sizeX;
-        uint32_t sizeY;
-        float triangleRes;
-        float zScale;
-    } computeVerticesConstants_;
-    uint32_t computeVerticesConstantsOffset_{0};
-
-    vk::ComputePipeline computeVerticesPipeline_{};
-    vk::PipelineLayout computeVerticesLayout_{};
-    std::vector<vk::DescriptorPool> computeVerticesPools_{};
 
     vk::PipelineLayout graphicsLayout_{};
     vk::GraphicsPipeline graphicsPipeline_{};
@@ -201,23 +115,17 @@ class TerrainEngine
     vk::Semaphore renderFinishedSemaphore_{};
 
     vk::Fence graphicsFence_{};
-    vk::Fence computeFence_{};
 
     float offsetX_{0.0f};
     float offsetY_{0.0f};
     float theta_{0.0f};
 
     void initStorage();
-    void initComputePipelines();
     void initGraphicsPipeline();
-    void initFaces(const uint32_t imageCount);
 
     void recreateSwapchain();
-    void allocateMeshData(const uint32_t imageCount);
     void allocateUBO(const uint32_t imageCount);
     void allocateDescriptorPools(const uint32_t imageCount);
     void allocateGraphicsCommandBuffers(const uint32_t imageCount);
-
-    void genTerrain(const uint32_t i);
 };
 } // namespace cg
