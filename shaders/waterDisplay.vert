@@ -26,7 +26,6 @@ layout(location = 1) out vec3 vertexNormal;
 
 layout(binding = 0) uniform Matrices
 {
-    mat4 model;
     mat4 view;
     mat4 proj;
 }
@@ -34,10 +33,9 @@ mvp;
 
 void main()
 {
-    gl_Position
-        = mvp.proj * mvp.view * mvp.model * vec4(vec3(position.x, position.y, position.z), 1.0f);
+    gl_Position = mvp.proj * mvp.view * vec4(vec3(position.x, position.y, position.z), 1.0f);
     gl_Position.y = -gl_Position.y;
-    vertexNormal = vec3(mvp.view * mvp.model * vec4(normal, 0.0f));
+    vertexNormal = vec3(mvp.view * vec4(normal, 0.0f));
     vertexNormal.y = -vertexNormal.y;
     vertexPos = gl_Position.xyz;
 }

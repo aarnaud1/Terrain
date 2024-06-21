@@ -83,7 +83,6 @@ class TerrainEngine
 
     struct MatrixBlock
     {
-        glm::mat4 model;
         glm::mat4 view;
         glm::mat4 proj;
     };
@@ -98,14 +97,33 @@ class TerrainEngine
     vkw::Queue<vkw::QueueFamilyType::PRESENT> presentQueue_{};
 
     std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> graphicsCommandBuffers_{};
+    std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> reflectionCommandBuffers_{};
+
+    struct TerrainRenderConstants
+    {
+        glm::mat4 model;
+        glm::vec4 clipPlane;
+    };
+    uint32_t terrainRenderConstantsOffset_;
 
     vkw::PipelineLayout graphicsLayout_{};
     vkw::GraphicsPipeline graphicsPipeline_{};
+    vkw::GraphicsPipeline offScreenPipeline_{};
     std::vector<vkw::DescriptorPool> graphicsPools_{};
 
     vkw::PipelineLayout waterLayout_{};
     vkw::GraphicsPipeline waterGraphicsPipeline_{};
     std::vector<vkw::DescriptorPool> waterPools_{};
+
+    vkw::ColorRenderTarget reflectionColorAttachment_{};
+    vkw::DepthRenderTarget reflectionDepthAttachment_{};
+    vkw::RenderPass reflectionRenderpass_{};
+    vkw::Framebuffer reflectionFramebuffer_{};
+
+    vkw::ColorRenderTarget refractionColorAttachment_{};
+    vkw::DepthRenderTarget refractionDepthAttachment_{};
+    vkw::RenderPass refractionRenderpass_{};
+    vkw::Framebuffer refractionFramebuffer_{};
 
     vkw::RenderPass renderpass_{};
     vkw::Swapchain swapchain_{};
@@ -123,9 +141,13 @@ class TerrainEngine
     void initStorage();
     void initGraphicsPipeline();
 
+    void allocateFramebuffers(const uint32_t w, const uint32_t h);
     void recreateSwapchain();
     void allocateUBO(const uint32_t imageCount);
     void allocateDescriptorPools(const uint32_t imageCount);
     void allocateGraphicsCommandBuffers(const uint32_t imageCount);
+
+    void renderReflectionTexture(const uint32_t frameId);
+    void renderRefractionTexture(const uint32_t frameId);
 };
 } // namespace cg

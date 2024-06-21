@@ -23,14 +23,6 @@ layout(location = 2) in vec3 vertexNormal;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(binding = 1) uniform Matrices
-{
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-}
-mvp;
-
 // TODO : try to use spec constants
 const float blurDist = 25.0f;
 const vec3 horizonColor = vec3(0.259f, 0.557f, 0.914f);
