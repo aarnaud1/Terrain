@@ -29,7 +29,7 @@ class TerrainGeneratorGPU
 {
   public:
     TerrainGeneratorGPU() = delete;
-    TerrainGeneratorGPU(vk::Device& device);
+    TerrainGeneratorGPU(vkw::Device& device);
 
     TerrainGeneratorGPU(const TerrainGeneratorGPU&) = delete;
     TerrainGeneratorGPU(TerrainGeneratorGPU&&) = delete;
@@ -38,7 +38,8 @@ class TerrainGeneratorGPU
     TerrainGeneratorGPU& operator=(TerrainGeneratorGPU&&) = delete;
 
     void setRefDistance(const float dist) { refDist_ = dist; }
-    void setBaseResolution(const float res) { baseResolution_ = res; }
+    void setBaseResolution(const float res) { terrainResolution_ = res; }
+    void setWaterResolution(const float res) { waterResolution_ = res; }
 
     void initStorage(const uint32_t sizeX, const uint32_t sizeY);
     void generate(const float offsetX, const float offsetY, const float theta);
@@ -55,31 +56,50 @@ class TerrainGeneratorGPU
     auto& faces() { return *faces_; }
     const auto& faces() const { return *faces_; }
 
+    auto& waterVertices() { return *waterVertices_; }
+    const auto& waterVertices() const { return *waterVertices_; }
+
+    auto& waterNormals() { return *waterNormals_; }
+    const auto& waterNormals() const { return *waterNormals_; }
+
+    auto& waterFaces() { return *waterFaces_; }
+    const auto& waterFaces() const { return *waterFaces_; }
+
     uint32_t vertexCount() const { return sizeX_ * sizeY_; }
     uint32_t faceCount() const { return 2 * (sizeX_ - 1) * (sizeY_ - 1); }
+
+    uint32_t waterVertexCount() const { return waterSizeX_ * waterSizeY_; }
+    uint32_t waterFacesCount() const { return 2 * (waterSizeX_ - 1) * (waterSizeY_ - 1); }
 
   private:
     static constexpr uint32_t maxComputeBlockSize = 1024;
 
-    vk::Device* device_{nullptr};
+    vkw::Device* device_{nullptr};
 
     float refDist_{1.0f};
-    float baseResolution_{1.0f};
+    float terrainResolution_{1.0f};
+    float waterResolution_{0.5f};
 
     uint32_t sizeX_;
     uint32_t sizeY_;
 
-    vk::Memory vertexMemory_{};
-    vk::Buffer<glm::vec3>* vertices_{nullptr};
-    vk::Buffer<glm::vec3>* normals_{nullptr};
-    vk::Buffer<glm::vec4>* colors_{nullptr};
+    uint32_t waterSizeX_;
+    uint32_t waterSizeY_;
 
-    vk::Memory facesMemory_{};
-    vk::Buffer<glm::uvec3>* faces_{nullptr};
+    vkw::Memory vertexMemory_{};
+    vkw::Buffer<glm::vec3>* vertices_{nullptr};
+    vkw::Buffer<glm::vec3>* normals_{nullptr};
+    vkw::Buffer<glm::vec4>* colors_{nullptr};
+    vkw::Buffer<glm::vec3>* waterVertices_{nullptr};
+    vkw::Buffer<glm::vec3>* waterNormals_{nullptr};
 
-    vk::Memory mapsMemory_{};
-    vk::Buffer<float>* heightMap_{nullptr};
-    vk::Buffer<float>* moistureMap_{nullptr};
+    vkw::Memory facesMemory_{};
+    vkw::Buffer<glm::uvec3>* faces_{nullptr};
+    vkw::Buffer<glm::uvec3>* waterFaces_{nullptr};
+
+    vkw::Memory mapsMemory_{};
+    vkw::Buffer<float>* heightMap_{nullptr};
+    vkw::Buffer<float>* moistureMap_{nullptr};
 
 #ifdef DEBUG_TERRAIN
     vk::Memory verticesStagingMem_{};
@@ -95,8 +115,8 @@ class TerrainGeneratorGPU
     vk::Buffer<glm::uvec3>* facesStaging_{nullptr};
 #endif
 
-    vk::Queue<vk::QueueFamilyType::COMPUTE> computeQueue_{};
-    vk::CommandPool<vk::QueueFamilyType::COMPUTE> computeCommandPool_{};
+    vkw::Queue<vkw::QueueFamilyType::COMPUTE> computeQueue_{};
+    vkw::CommandPool<vkw::QueueFamilyType::COMPUTE> computeCommandPool_{};
 
     // Algorithms data
     struct
@@ -104,7 +124,8 @@ class TerrainGeneratorGPU
         uint32_t dimX;
         uint32_t dimY;
     } initFacesConstants_;
-    vk::ComputeProgram initFacesProgram_;
+    vkw::ComputeProgram initFacesProgram_;
+    vkw::ComputeProgram initWaterFacesProgram_;
 
     struct
     {
@@ -118,13 +139,13 @@ class TerrainGeneratorGPU
         float offY;
         float theta;
     } computeMapConstants_;
-    vk::ComputeProgram computeMapsProgram_;
+    vkw::ComputeProgram computeMapsProgram_;
 
     struct
     {
         uint32_t pointCount;
     } computeColorsConstants_;
-    vk::ComputeProgram computeColorsProgram_;
+    vkw::ComputeProgram computeColorsProgram_;
 
     struct
     {
@@ -133,10 +154,20 @@ class TerrainGeneratorGPU
         float triangleRes;
         float zScale;
     } computeVerticesConstants_;
-    vk::ComputeProgram computeVerticesProgram_;
+    vkw::ComputeProgram computeVerticesProgram_;
+
+    struct
+    {
+        uint32_t sizeX;
+        uint32_t sizeY;
+        float triangleRes;
+        float zScale;
+    } computeWaterConstants_;
+    vkw::ComputeProgram computeWaterProgram_;
 
     bool allocated_{false};
 
     void initFaces();
+    void initWaterFaces();
 };
 } // namespace cg

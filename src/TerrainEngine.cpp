@@ -51,7 +51,7 @@ void TerrainEngine::prepare()
     graphicsFence_.init(device_, true);
 }
 
-void TerrainEngine::renderFrame(const bool generateTerrain)
+void TerrainEngine::renderFrame(const bool /*generateTerrain*/)
 {
     // Perform rendering
     const float theta = 90.0f;
@@ -66,7 +66,7 @@ void TerrainEngine::renderFrame(const bool generateTerrain)
 
     const glm::vec3 vert{0.0f, 0.0f, 1.0f};
     const glm::vec3 dir{cosPhi * cosTheta, cosPhi * sinTheta, sinPhi};
-    const glm::vec3 pos{0.0f /*offsetX_*/, 0.0f /*offsetY_*/, h};
+    const glm::vec3 pos{0.0f, 0.0f, h};
 
     MatrixBlock mvp{glm::mat4{1.0f}, glm::mat4{1.0f}, glm::mat4{1.0f}};
     mvp.model = glm::mat4{1.0f};
@@ -76,7 +76,7 @@ void TerrainEngine::renderFrame(const bool generateTerrain)
     graphicsFence_.waitAndReset();
     uint32_t imageIndex;
     auto res = swapchain_.getNextImage(imageIndex, imageAvailableSemaphore_);
-    if(res == VK_ERROR_OUT_OF_DATE_KHR /*|| (width_ != w) || (height_ != h)*/)
+    if(res == VK_ERROR_OUT_OF_DATE_KHR)
     {
         recreateSwapchain();
         return;
@@ -108,22 +108,16 @@ void TerrainEngine::initStorage()
     const float d = farDistance_ * glm::tan(glm::radians(fov_));
     const auto sizeX = uint32_t((2.0f * d) / baseResolution_);
     const auto sizeY = uint32_t(farDistance_ / baseResolution_);
-    generator_.initStorage(sizeX, sizeY);
 
     fprintf(stdout, "[DEBUG]\tsizeX = %u\n", sizeX);
     fprintf(stdout, "[DEBUG]\tsizeY = %u\n", sizeY);
+    generator_.initStorage(sizeX, sizeY);
 
     storageInitialized_ = true;
 }
 
 void TerrainEngine::initGraphicsPipeline()
 {
-    graphicsLayout_.init(device_, 1);
-    graphicsLayout_.getDescriptorSetlayoutInfo(0)
-        .addUniformBufferBinding(VK_SHADER_STAGE_VERTEX_BIT, 0, 1)
-        .addUniformBufferBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 1, 1);
-    graphicsLayout_.create();
-
     renderpass_.init(device_);
     renderpass_
         .addColorAttachment(
@@ -150,6 +144,13 @@ void TerrainEngine::initGraphicsPipeline()
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
         .create();
 
+    // Terrain rendering
+    graphicsLayout_.init(device_, 1);
+    graphicsLayout_.getDescriptorSetlayoutInfo(0)
+        .addUniformBufferBinding(VK_SHADER_STAGE_VERTEX_BIT, 0, 1)
+        .addUniformBufferBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 1, 1);
+    graphicsLayout_.create();
+
     graphicsPipeline_.init(device_);
     graphicsPipeline_
         .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/terrainDisplay_vert.spv")
@@ -165,6 +166,27 @@ void TerrainEngine::initGraphicsPipeline()
         .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
         .createPipeline(renderpass_, graphicsLayout_);
 
+    // Water rendering
+    waterLayout_.init(device_, 1);
+    waterLayout_.getDescriptorSetlayoutInfo(0)
+        .addUniformBufferBinding(VK_SHADER_STAGE_VERTEX_BIT, 0, 1)
+        .addUniformBufferBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 1, 1);
+    waterLayout_.create();
+
+    waterGraphicsPipeline_.init(device_);
+    waterGraphicsPipeline_
+        .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/waterDisplay_vert.spv")
+        .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/waterDisplay_frag.spv")
+        .addVertexBinding(0, sizeof(glm::vec3))
+        .addVertexBinding(1, sizeof(glm::vec3))
+        .addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
+        .addVertexAttribute(1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0);
+    waterGraphicsPipeline_.setViewport(0.0f, 0.0f, float(width_), float(height_))
+        .setScissors(0, 0, width_, height_)
+        .enableBlending(true)
+        .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+        .createPipeline(renderpass_, waterLayout_);
+
     swapchain_.init(instance_, device_, renderpass_, width_, height_, colorFormat);
 }
 
@@ -173,13 +195,13 @@ void TerrainEngine::recreateSwapchain()
     graphicsCommandBuffers_.clear();
     uboBuffers_.clear();
     uboMemory_.reset(nullptr);
-    swapchain_.reCreate(width_, height_, colorFormat);
+    swapchain_.reCreate(width_, height_);
 
     const uint32_t imageCount = swapchain_.imageCount();
     allocateUBO(imageCount);
     allocateDescriptorPools(imageCount);
     allocateGraphicsCommandBuffers(imageCount);
-    graphicsFence_ = vk::Fence(device_, true);
+    graphicsFence_ = vkw::Fence(device_, true);
 }
 
 void TerrainEngine::allocateUBO(const uint32_t imageCount)
@@ -189,7 +211,7 @@ void TerrainEngine::allocateUBO(const uint32_t imageCount)
         uboBuffers_.clear();
     }
 
-    uboMemory_.reset(new vk::Memory(
+    uboMemory_.reset(new vkw::Memory(
         device_,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
             | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
@@ -204,13 +226,19 @@ void TerrainEngine::allocateUBO(const uint32_t imageCount)
 void TerrainEngine::allocateDescriptorPools(const uint32_t imageCount)
 {
     graphicsPools_.clear();
-    graphicsPools_.resize(imageCount);
+    graphicsPools_.resize(2 * imageCount);
 
     for(uint32_t i = 0; i < imageCount; ++i)
     {
-        graphicsPools_[i].init(
+        // Descriptor pool for terrain
+        graphicsPools_[2 * i + 0].init(
             device_, graphicsLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-        graphicsPools_[i].bindUniformBuffer(0, 0, uboBuffers_[i]->getFullSizeInfo());
+        graphicsPools_[2 * i + 0].bindUniformBuffer(0, 0, uboBuffers_[i]->getFullSizeInfo());
+
+        // Descriptor pool for water
+        graphicsPools_[2 * i + 1].init(
+            device_, graphicsLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        graphicsPools_[2 * i + 1].bindUniformBuffer(0, 0, uboBuffers_[i]->getFullSizeInfo());
     }
 }
 
@@ -225,6 +253,7 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
     for(uint32_t i = 0; i < imageCount; ++i)
     {
         const uint32_t faceCount = generator_.faceCount();
+        const uint32_t waterFaceCount = generator_.waterFacesCount();
 
         auto& graphicsCmdBuffer = graphicsCommandBuffers_[i];
         graphicsCmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
@@ -234,15 +263,25 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
                 VkOffset2D{0, 0},
                 swapchain_.getExtent(),
                 glm::vec4{0.259f, 0.557f, 0.914f, 1.0f})
+            // Terrain
             .bindGraphicsPipeline(graphicsPipeline_)
             .setViewport(0, 0, swapchain_.getExtent().width, swapchain_.getExtent().height)
             .setScissor({0, 0}, swapchain_.getExtent())
-            .bindGraphicsDescriptorSets(graphicsLayout_, graphicsPools_[i])
+            .bindGraphicsDescriptorSets(graphicsLayout_, graphicsPools_[2 * i + 0])
             .bindVertexBuffer(0, generator_.vertices(), 0)
             .bindVertexBuffer(1, generator_.colors(), 0)
             .bindVertexBuffer(2, generator_.normals(), 0)
             .bindIndexBuffer(generator_.faces(), VK_INDEX_TYPE_UINT32)
             .drawIndexed(3 * faceCount, 1, 0, 0, 0)
+            // Water
+            .bindGraphicsPipeline(waterGraphicsPipeline_)
+            .setViewport(0, 0, swapchain_.getExtent().width, swapchain_.getExtent().height)
+            .setScissor({0, 0}, swapchain_.getExtent())
+            .bindGraphicsDescriptorSets(waterLayout_, graphicsPools_[2 * i + 1])
+            .bindVertexBuffer(0, generator_.waterVertices(), 0)
+            .bindVertexBuffer(1, generator_.waterNormals(), 0)
+            .bindIndexBuffer(generator_.waterFaces(), VK_INDEX_TYPE_UINT32)
+            .drawIndexed(3 * waterFaceCount, 1, 0, 0, 0)
             .endRenderPass()
             .end();
     }

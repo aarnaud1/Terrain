@@ -44,6 +44,7 @@ class TerrainEngine
     {
         baseResolution_ = res;
         generator_.setBaseResolution(res);
+        generator_.setWaterResolution(0.5f * res);
     }
     void setFarDistance(const float dist) { farDistance_ = dist; }
     void setFov(const float fov) { fov_ = fov; }
@@ -60,14 +61,13 @@ class TerrainEngine
     }
 
   private:
-    static constexpr uint32_t maxComputeBlockSize = 256;
     static constexpr VkFormat colorFormat = VK_FORMAT_B8G8R8A8_SRGB;
     static constexpr VkFormat depthStencilFormat = VK_FORMAT_D24_UNORM_S8_UINT;
 
     GLFWwindow* window_{nullptr};
 
-    vk::Instance instance_;
-    vk::Device device_;
+    vkw::Instance instance_;
+    vkw::Device device_;
 
     uint32_t width_{0};
     uint32_t height_{0};
@@ -87,34 +87,34 @@ class TerrainEngine
         glm::mat4 view;
         glm::mat4 proj;
     };
-    std::unique_ptr<vk::Memory> uboMemory_{nullptr};
-    std::vector<vk::Buffer<MatrixBlock>*> uboBuffers_{};
+    std::unique_ptr<vkw::Memory> uboMemory_{nullptr};
+    std::vector<vkw::Buffer<MatrixBlock>*> uboBuffers_{};
 
     // Command pools
-    vk::CommandPool<vk::QueueFamilyType::GRAPHICS> graphicsCommandPool_{};
+    vkw::CommandPool<vkw::QueueFamilyType::GRAPHICS> graphicsCommandPool_{};
 
     // Device queues
-    vk::Queue<vk::QueueFamilyType::GRAPHICS> graphicsQueue_{};
-    vk::Queue<vk::QueueFamilyType::PRESENT> presentQueue_{};
+    vkw::Queue<vkw::QueueFamilyType::GRAPHICS> graphicsQueue_{};
+    vkw::Queue<vkw::QueueFamilyType::PRESENT> presentQueue_{};
 
-    std::vector<vk::CommandBuffer<vk::QueueFamilyType::GRAPHICS>> graphicsCommandBuffers_{};
+    std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> graphicsCommandBuffers_{};
 
-    vk::PipelineLayout graphicsLayout_{};
-    vk::GraphicsPipeline graphicsPipeline_{};
-    std::vector<vk::DescriptorPool> graphicsPools_{};
+    vkw::PipelineLayout graphicsLayout_{};
+    vkw::GraphicsPipeline graphicsPipeline_{};
+    std::vector<vkw::DescriptorPool> graphicsPools_{};
 
-    vk::PipelineLayout waterLayout_{};
-    vk::GraphicsPipeline waterGraphicsPipeline_{};
-    std::vector<vk::DescriptorPool> waterPools_{};
+    vkw::PipelineLayout waterLayout_{};
+    vkw::GraphicsPipeline waterGraphicsPipeline_{};
+    std::vector<vkw::DescriptorPool> waterPools_{};
 
-    vk::RenderPass renderpass_{};
-    vk::Swapchain swapchain_{};
+    vkw::RenderPass renderpass_{};
+    vkw::Swapchain swapchain_{};
 
     // Sync objects
-    vk::Semaphore imageAvailableSemaphore_{};
-    vk::Semaphore renderFinishedSemaphore_{};
+    vkw::Semaphore imageAvailableSemaphore_{};
+    vkw::Semaphore renderFinishedSemaphore_{};
 
-    vk::Fence graphicsFence_{};
+    vkw::Fence graphicsFence_{};
 
     float offsetX_{0.0f};
     float offsetY_{0.0f};

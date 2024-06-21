@@ -39,12 +39,14 @@ static void saveSurface(
 
 namespace cg
 {
-TerrainGeneratorGPU::TerrainGeneratorGPU(vk::Device& device)
+TerrainGeneratorGPU::TerrainGeneratorGPU(vkw::Device& device)
     : device_{&device}
     , initFacesProgram_{device, "output/spv/initFaces_comp.spv"}
+    , initWaterFacesProgram_{device, "output/spv/initFaces_comp.spv"}
     , computeMapsProgram_{device, "output/spv/computeMaps_comp.spv"}
     , computeColorsProgram_{device, "output/spv/computeColors_comp.spv"}
     , computeVerticesProgram_{device, "output/spv/computeVertices_comp.spv"}
+    , computeWaterProgram_{device, "output/spv/computeWater_comp.spv"}
 {}
 
 void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY)
@@ -69,6 +71,11 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
 
     const uint32_t faceCount = 2 * (sizeX_ - 1) * (sizeY_ - 1);
     facesMemory_.init(*device_, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    waterSizeX_ = uint32_t((float(sizeX_) * terrainResolution_) / waterResolution_);
+    waterSizeY_ = uint32_t((float(sizeY_) * terrainResolution_) / waterResolution_);
+    const uint32_t waterVertexCount = waterSizeX_ * waterSizeY_;
+    const uint32_t waterFaceCount = 2 * (waterSizeX_ - 1) * (waterSizeY_ - 1);
 
 #ifdef DEBUG_TERRAIN
     vertices_ = &vertexMemory_.createBuffer<glm::vec3>(
@@ -119,36 +126,49 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertexCount);
     colors_ = &vertexMemory_.createBuffer<glm::vec4>(
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertexCount);
+
     faces_ = &facesMemory_.createBuffer<glm::uvec3>(
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, faceCount);
 #endif
+    waterVertices_ = &vertexMemory_.createBuffer<glm::vec3>(
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, waterVertexCount);
+    waterNormals_ = &vertexMemory_.createBuffer<glm::vec3>(
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, waterVertexCount);
+
+    waterFaces_ = &facesMemory_.createBuffer<glm::uvec3>(
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, waterFaceCount);
+
     vertexMemory_.allocate();
     facesMemory_.allocate();
 
-    initFacesProgram_.bindBuffer(*faces_)
+    initFacesProgram_.bindStorageBuffers(*faces_)
         .spec(maxComputeBlockSize)
         .pushConstantsRange(sizeof(initFacesConstants_))
         .create();
 
-    computeMapsProgram_.bindBuffer(*heightMap_)
-        .bindBuffer(*moistureMap_)
+    computeMapsProgram_.bindStorageBuffers(*heightMap_, *moistureMap_)
         .spec(maxComputeBlockSize, heightRandomSeed, moistRandomSeed)
         .pushConstantsRange(sizeof(computeMapConstants_))
         .create();
 
-    computeColorsProgram_.bindBuffer(*heightMap_)
-        .bindBuffer(*moistureMap_)
-        .bindBuffer(*colors_)
+    computeColorsProgram_.bindStorageBuffers(*heightMap_, *moistureMap_, *colors_)
         .spec(maxComputeBlockSize)
-        .pushConstantsRange(sizeof(sizeof(computeColorsConstants_)))
+        .pushConstantsRange(sizeof(computeColorsConstants_))
         .create();
 
-    computeVerticesProgram_.bindBuffer(*heightMap_)
-        .bindBuffer(*moistureMap_)
-        .bindBuffer(*vertices_)
-        .bindBuffer(*normals_)
+    computeVerticesProgram_.bindStorageBuffers(*heightMap_, *moistureMap_, *vertices_, *normals_)
         .spec(maxComputeBlockSize)
         .pushConstantsRange(sizeof(computeVerticesConstants_))
+        .create();
+
+    initWaterFacesProgram_.bindStorageBuffers(*waterFaces_)
+        .spec(maxComputeBlockSize)
+        .pushConstantsRange(sizeof(initFacesConstants_))
+        .create();
+
+    computeWaterProgram_.bindStorageBuffers(*waterVertices_, *waterNormals_)
+        .spec(maxComputeBlockSize)
+        .pushConstantsRange(sizeof(computeWaterConstants_))
         .create();
 
     computeQueue_.init(*device_);
@@ -157,6 +177,7 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
     allocated_ = true;
 
     initFaces();
+    initWaterFaces();
 }
 
 void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, const float theta)
@@ -166,55 +187,61 @@ void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, con
         throw std::runtime_error("Terrain generation engine must be allocated before being used");
     }
 
-    fprintf(stdout, "[DEBUG] Launching terrain generation\n");
-
-    const auto start = std::chrono::high_resolution_clock::now();
+    // fprintf(stdout, "[DEBUG] Launching terrain generation\n");
+    // const auto start = std::chrono::high_resolution_clock::now();
 
     // Fill push constants
-    const float baseDim = refDist_ / baseResolution_;
+    const float baseDim = refDist_ / terrainResolution_;
     computeMapConstants_.sizeX = sizeX_;
     computeMapConstants_.sizeY = sizeY_;
     computeMapConstants_.heightWaveLength = 0.2f * baseDim;
     computeMapConstants_.moistureWaveLength = 0.5f * baseDim;
     computeMapConstants_.heightOctaves = 10;
     computeMapConstants_.moistureOctaves = 6;
-    computeMapConstants_.offX = offsetX / baseResolution_;
-    computeMapConstants_.offY = offsetY / baseResolution_;
+    computeMapConstants_.offX = offsetX / terrainResolution_;
+    computeMapConstants_.offY = offsetY / terrainResolution_;
     computeMapConstants_.theta = glm::radians(theta);
 
     computeVerticesConstants_.sizeX = sizeX_;
     computeVerticesConstants_.sizeY = sizeY_;
-    computeVerticesConstants_.triangleRes = baseResolution_;
+    computeVerticesConstants_.triangleRes = terrainResolution_;
     computeVerticesConstants_.zScale = 2.5f;
 
     computeColorsConstants_.pointCount = sizeX_ * sizeY_;
 
+    computeWaterConstants_.sizeX = waterSizeX_;
+    computeWaterConstants_.sizeY = waterSizeY_;
+    computeWaterConstants_.triangleRes = waterResolution_;
+    computeWaterConstants_.zScale = 2.5f;
+
     auto cmdBuffer = computeCommandPool_.createCommandBuffer();
     cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
         .bindComputeProgram(computeMapsProgram_, computeMapConstants_)
-        .dispatch(vk::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
+        .dispatch(vkw::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
         .bufferMemoryBarriers(
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            vk::createBufferMemoryBarrier(
+            vkw::createBufferMemoryBarrier(
                 *heightMap_, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-            vk::createBufferMemoryBarrier(
+            vkw::createBufferMemoryBarrier(
                 *moistureMap_, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT))
         .bindComputeProgram(computeColorsProgram_, computeColorsConstants_)
-        .dispatch(vk::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
+        .dispatch(vkw::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
         .bindComputeProgram(computeVerticesProgram_, computeVerticesConstants_)
-        .dispatch(vk::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
+        .dispatch(vkw::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
+        .bindComputeProgram(computeWaterProgram_, computeWaterConstants_)
+        .dispatch(vkw::divUp(waterSizeX_ * waterSizeY_, maxComputeBlockSize))
 #ifdef DEBUG_TERRAIN
         .bufferMemoryBarriers(
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            vk::createBufferMemoryBarrier(
+            vkw::createBufferMemoryBarrier(
                 *vertices_, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT),
-            vk::createBufferMemoryBarrier(
+            vkw::createBufferMemoryBarrier(
                 *colors_, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT),
-            vk::createBufferMemoryBarrier(
+            vkw::createBufferMemoryBarrier(
                 *normals_, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT),
-            vk::createBufferMemoryBarrier(
+            vkw::createBufferMemoryBarrier(
                 *faces_, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT))
         .copyBuffer(*vertices_, *verticesStaging_)
         .copyBuffer(*colors_, *colorsStaging_)
@@ -275,9 +302,9 @@ void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, con
     imgCount++;
 #endif
 
-    const auto stop = std::chrono::high_resolution_clock::now();
-    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-    fprintf(stdout, "[DEBUG] Generation took : %f [ms]\n", (double) elapsed.count() / 1000.0f);
+    // const auto stop = std::chrono::high_resolution_clock::now();
+    // const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    // fprintf(stdout, "[DEBUG] Generation took : %f [ms]\n", (double) elapsed.count() / 1000.0f);
 }
 
 void TerrainGeneratorGPU::initFaces()
@@ -289,7 +316,22 @@ void TerrainGeneratorGPU::initFaces()
     auto cmdBuffer = computeCommandPool_.createCommandBuffer();
     cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
         .bindComputeProgram(initFacesProgram_, initFacesConstants_)
-        .dispatch(vk::divUp(halfFaceCount, maxComputeBlockSize))
+        .dispatch(vkw::divUp(halfFaceCount, maxComputeBlockSize))
+        .end();
+
+    computeQueue_.submit(cmdBuffer).waitIdle();
+}
+
+void TerrainGeneratorGPU::initWaterFaces()
+{
+    const uint32_t halfFaceCount = (waterSizeX_ - 1) * (waterSizeY_ - 1);
+    initFacesConstants_.dimX = waterSizeX_ - 1;
+    initFacesConstants_.dimY = waterSizeY_ - 1;
+
+    auto cmdBuffer = computeCommandPool_.createCommandBuffer();
+    cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+        .bindComputeProgram(initWaterFacesProgram_, initFacesConstants_)
+        .dispatch(vkw::divUp(halfFaceCount, maxComputeBlockSize))
         .end();
 
     computeQueue_.submit(cmdBuffer).waitIdle();

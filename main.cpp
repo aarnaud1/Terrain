@@ -26,7 +26,7 @@ static void mainLoop(GLFWwindow* window, cg::TerrainEngine* engine);
 
 static void errorCallback(int error, const char* msg);
 static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
+// static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
 
 float offsetX = 0.0f;
 float offsetY = 0.0f;

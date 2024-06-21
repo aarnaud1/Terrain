@@ -18,8 +18,7 @@
 #version 450 core
 
 layout(location = 0) in vec3 vertexPos;
-layout(location = 1) in vec4 vertexColor;
-layout(location = 2) in vec3 vertexNormal;
+layout(location = 1) in vec3 vertexNormal;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -39,20 +38,7 @@ float sigm(const float x, const float alpha) { return 1.0f / (1.0f + exp(-alpha 
 
 void main()
 {
-    const float shininess = 5.0f;
-    const vec3 L = normalize(vec3(1.0f, 0.0f, 1.0f));
-    const vec3 N = normalize(vertexNormal);
-    const vec3 R = reflect(L, N);
-    const vec3 V = normalize(-vertexPos);
-    float specAngle = max(dot(R, V), 0.0);
-    const float specular = pow(specAngle, shininess);
-
-    const float lambertian = max(dot(N, L), 0.0f);
-    const vec3 ambiantColor = 0.1f * vertexColor.xyz;
-    const vec3 diffuseColor = 0.9f * vertexColor.xyz;
-    const vec3 specularColor = 0.2f * vertexColor.xyz;
-    const vec3 color = ambiantColor + lambertian * diffuseColor + specular * specularColor;
+    const vec3 color = vec3(0.004f, 0.137f, 0.271f);
     const float blurFact = sigm(vertexPos.z - blurDist, 1.0f);
-
-    fragColor = vec4(mix(color, horizonColor, blurFact), 1.0f);
+    fragColor = vec4(mix(color, horizonColor, blurFact), 0.8f);
 }
