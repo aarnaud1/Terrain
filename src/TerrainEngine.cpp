@@ -26,12 +26,19 @@ namespace cg
 TerrainEngine::TerrainEngine(
     GLFWwindow* window, const uint32_t initWidth, const uint32_t initHeight)
     : window_{window}
-    , instance_{window}
+    , instance_{window_}
     , device_{instance_}
     , width_{initWidth}
     , height_{initHeight}
     , generator_{device_}
-{}
+{
+    const auto deviceFeatures = device_.getFeatures();
+    const bool clipPlaneSupported = deviceFeatures.shaderClipDistance;
+    if(!clipPlaneSupported)
+    {
+        throw std::runtime_error("Clip plane not supported on the selected device");
+    }
+}
 
 void TerrainEngine::prepare()
 {
@@ -42,12 +49,17 @@ void TerrainEngine::prepare()
     initStorage();
     initGraphicsPipeline();
 
+    frameBufferUpdatedEvent_.init(device_);
+
     allocateUBO(swapchain_.imageCount());
     allocateDescriptorPools(swapchain_.imageCount());
     allocateGraphicsCommandBuffers(swapchain_.imageCount());
 
+    terrainGeneratedSemaphore_.init(device_);
+    waterGeneratedSemaphore_.init(device_);
     imageAvailableSemaphore_.init(device_);
     renderFinishedSemaphore_.init(device_);
+
     graphicsFence_.init(device_, true);
 }
 
@@ -77,24 +89,24 @@ void TerrainEngine::renderFrame(const bool /*generateTerrain*/)
         return;
     }
 
-    // if(generateTerrain)
-    {
-        generator_.generate(offsetX_, offsetY_, theta_);
-    }
-
     MatrixBlock mvp{glm::mat4{1.0f}, glm::mat4{1.0f}};
     mvp.view = glm::lookAt(pos, pos + dir, glm::vec3{0.0f, 0.0f, 1.0f});
-    mvp.proj = glm::perspective(glm::radians(fov_), float(width_) / float(height_), 0.1f, 30.0f);
+    mvp.proj
+        = glm::perspective(glm::radians(fov_), float(width_) / float(height_), 0.1f, farDistance_);
     uboMemory_->copyFromHost<MatrixBlock>(&mvp, imageIndex * sizeof(MatrixBlock), 1);
 
-    // Render framebuffers
-    renderReflectionTexture(imageIndex);
-    renderRefractionTexture(imageIndex);
+    generator_.generate(
+        offsetX_, offsetY_, theta_, terrainGeneratedSemaphore_, waterGeneratedSemaphore_);
 
     graphicsQueue_.submit(
+        reflectionCommandBuffers_[imageIndex],
+        {&terrainGeneratedSemaphore_},
+        {VK_PIPELINE_STAGE_VERTEX_INPUT_BIT},
+        {});
+    graphicsQueue_.submit(
         graphicsCommandBuffers_[imageIndex],
-        {&imageAvailableSemaphore_},
-        {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT},
+        {&imageAvailableSemaphore_, &waterGeneratedSemaphore_},
+        {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT},
         {&renderFinishedSemaphore_},
         graphicsFence_);
     presentQueue_.present(swapchain_, {&renderFinishedSemaphore_}, imageIndex);
@@ -109,7 +121,7 @@ void TerrainEngine::initStorage()
     }
 
     const float d = farDistance_ * glm::tan(glm::radians(fov_));
-    const auto sizeX = uint32_t((2.0f * d) / baseResolution_);
+    const auto sizeX = uint32_t((/*2.0f **/ d) / baseResolution_);
     const auto sizeY = uint32_t(farDistance_ / baseResolution_);
 
     fprintf(stdout, "[DEBUG]\tsizeX = %u\n", sizeX);
@@ -125,11 +137,15 @@ void TerrainEngine::initGraphicsPipeline()
     offscreenRenderpass_
         .addColorAttachment(
             colorFormat,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             VK_ATTACHMENT_LOAD_OP_CLEAR,
             VK_ATTACHMENT_STORE_OP_STORE,
             VK_SAMPLE_COUNT_1_BIT)
         .addDepthAttachment(
             depthStencilFormat,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             VK_ATTACHMENT_LOAD_OP_CLEAR,
             VK_ATTACHMENT_STORE_OP_STORE,
             VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -166,11 +182,15 @@ void TerrainEngine::initGraphicsPipeline()
     renderpass_
         .addColorAttachment(
             colorFormat,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             VK_ATTACHMENT_LOAD_OP_CLEAR,
             VK_ATTACHMENT_STORE_OP_STORE,
             VK_SAMPLE_COUNT_1_BIT)
         .addDepthAttachment(
             depthStencilFormat,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             VK_ATTACHMENT_LOAD_OP_CLEAR,
             VK_ATTACHMENT_STORE_OP_STORE,
             VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -378,6 +398,7 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             .bindIndexBuffer(generator_.faces(), VK_INDEX_TYPE_UINT32)
             .drawIndexed(3 * faceCount, 1, 0, 0, 0)
             .endRenderPass()
+            .setEvent(frameBufferUpdatedEvent_, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
             .end();
     }
 
@@ -398,6 +419,13 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
 
         auto& graphicsCmdBuffer = graphicsCommandBuffers_[i];
         graphicsCmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
+            .waitEvent(
+                frameBufferUpdatedEvent_,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                {},
+                {},
+                {})
             .beginRenderPass(
                 renderpass_,
                 swapchain_.getFramebuffer(i),
@@ -437,11 +465,4 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             .end();
     }
 }
-
-void TerrainEngine::renderReflectionTexture(const uint32_t frameId)
-{
-    graphicsQueue_.submit(reflectionCommandBuffers_[frameId]).waitIdle();
-}
-
-void TerrainEngine::renderRefractionTexture(const uint32_t /*frameId*/) {}
 } // namespace cg

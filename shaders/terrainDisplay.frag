@@ -17,34 +17,30 @@
 
 #version 450 core
 
-layout(location = 0) in vec3 vertexPos;
+layout(location = 0) in vec4 vertexPos;
 layout(location = 1) in vec4 vertexColor;
 layout(location = 2) in vec3 vertexNormal;
 
 layout(location = 0) out vec4 fragColor;
 
-// TODO : try to use spec constants
-const float blurDist = 25.0f;
-const vec3 horizonColor = vec3(0.259f, 0.557f, 0.914f);
-
-float sigm(const float x, const float alpha) { return 1.0f / (1.0f + exp(-alpha * x)); }
+#include "lighting.inl"
 
 void main()
 {
-    const float shininess = 50.0f;
-    const vec3 L = normalize(vec3(1.0f, 0.0f, 1.0f));
+    const float shininess = 10.0f;
+    const vec3 L = normalize(lightPos - vertexPos.xyz);
     const vec3 N = normalize(vertexNormal);
     const vec3 R = reflect(L, N);
-    const vec3 V = normalize(-vertexPos);
+    const vec3 V = normalize(-vertexPos.xyz);
     float specAngle = max(dot(R, V), 0.0);
     const float specular = pow(specAngle, shininess);
 
-    const float lambertian = max(dot(N, L), 0.0f);
-    const vec3 ambiantColor = 0.1f * vertexColor.xyz;
-    const vec3 diffuseColor = 0.9f * vertexColor.xyz;
-    const vec3 specularColor = 0.2f * vertexColor.xyz;
+    const float lambertian = max(dot(N, normalize(lightDir)), 0.0f);
+    const vec3 ambiantColor = 0.2f * vertexColor.xyz;
+    const vec3 diffuseColor = 0.8f * vertexColor.xyz;
+    const vec3 specularColor = 0.1f * vertexColor.xyz;
     const vec3 color = ambiantColor + lambertian * diffuseColor + specular * specularColor;
-    const float blurFact = sigm(vertexPos.z - blurDist, 1.0f);
 
+    const float blurFact = sigm(vertexPos.t - blurDist, 1.0f);
     fragColor = vec4(mix(color, horizonColor, blurFact), 1.0f);
 }

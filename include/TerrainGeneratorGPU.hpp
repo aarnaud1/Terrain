@@ -21,8 +21,6 @@
 #include <glm/glm.hpp>
 #include <vkWrappers/wrappers.hpp>
 
-// #define DEBUG_TERRAIN
-
 namespace cg
 {
 class TerrainGeneratorGPU
@@ -42,7 +40,12 @@ class TerrainGeneratorGPU
     void setWaterResolution(const float res) { waterResolution_ = res; }
 
     void initStorage(const uint32_t sizeX, const uint32_t sizeY);
-    void generate(const float offsetX, const float offsetY, const float theta);
+    void generate(
+        const float offsetX,
+        const float offsetY,
+        const float theta,
+        vkw::Semaphore& terrainSemaphote,
+        vkw::Semaphore& waterSemaphore);
 
     auto& vertices() { return *vertices_; }
     const auto& vertices() const { return *vertices_; }
@@ -102,22 +105,14 @@ class TerrainGeneratorGPU
     vkw::Buffer<float>* moistureMap_{nullptr};
     vkw::Buffer<float>* waterMap_{nullptr};
 
-#ifdef DEBUG_TERRAIN
-    vk::Memory verticesStagingMem_{};
-    vk::Buffer<glm::vec3>* verticesStaging_{nullptr};
-
-    vk::Memory normalsStagingMem_{};
-    vk::Buffer<glm::vec3>* normalsStaging_{nullptr};
-
-    vk::Memory colorStagingMem_{};
-    vk::Buffer<glm::vec4>* colorsStaging_{nullptr};
-
-    vk::Memory facesStagingMem_{};
-    vk::Buffer<glm::uvec3>* facesStaging_{nullptr};
-#endif
-
     vkw::Queue<vkw::QueueFamilyType::COMPUTE> computeQueue_{};
     vkw::CommandPool<vkw::QueueFamilyType::COMPUTE> computeCommandPool_{};
+    vkw::CommandBuffer<vkw::QueueFamilyType::COMPUTE> computeTerrainCommandBuffer_{};
+    vkw::CommandBuffer<vkw::QueueFamilyType::COMPUTE> computeWaterCommandBuffer_{};
+
+    vkw::Fence terrainFence_{};
+    vkw::Fence waterFence_{};
+    vkw::Semaphore terrainGeneratedSemaphore_{};
 
     // Algorithms data
     struct
@@ -142,33 +137,35 @@ class TerrainGeneratorGPU
     vkw::ComputeProgram computeMoistureMapProgram_;
     vkw::ComputeProgram computeWaterMapProgram_;
 
-    struct
+    struct ComputeColorsConstants
     {
         uint32_t pointCount;
-    } computeColorsConstants_;
+    };
     vkw::ComputeProgram computeColorsProgram_;
 
-    struct
+    struct ComputeVerticesConstants
     {
         uint32_t sizeX;
         uint32_t sizeY;
         float triangleRes;
         float zScale;
-    } computeVerticesConstants_;
+    };
     vkw::ComputeProgram computeVerticesProgram_;
 
-    struct
+    struct ComputeWaterConstants
     {
         uint32_t sizeX;
         uint32_t sizeY;
         float triangleRes;
         float zScale;
-    } computeWaterConstants_;
+    };
     vkw::ComputeProgram computeWaterProgram_;
 
     bool allocated_{false};
 
     void initFaces();
     void initWaterFaces();
+
+    void updateCommandBuffers(const float offsetX, const float offsetY, const float theta);
 };
 } // namespace cg

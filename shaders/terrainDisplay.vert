@@ -24,9 +24,9 @@ layout(location = 2) in vec3 normal;
 out gl_PerVertex
 {
     vec4 gl_Position;
-    float gl_ClipDistance[];
+    float gl_ClipDistance[1];
 };
-layout(location = 0) out vec3 vertexPos;
+layout(location = 0) out vec4 vertexPos;
 layout(location = 1) out vec4 vertexColor;
 layout(location = 2) out vec3 vertexNormal;
 
@@ -50,10 +50,8 @@ void main()
 
     gl_Position = mvp.proj * mvp.view * pcs.model * vec4(position, 1.0f);
     gl_Position.y = -gl_Position.y;
-    vertexPos = gl_Position.xyz;
 
+    vertexNormal = normal;
+    vertexPos = vec4(position, gl_Position.z);
     vertexColor = color;
-
-    vertexNormal = vec3(mvp.view * pcs.model * vec4(normal, 0.0f));
-    vertexNormal.y = -vertexNormal.y;
 }

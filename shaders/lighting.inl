@@ -15,27 +15,15 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#version 450 core
+#ifndef LIGHTING_INL
+#define LIGHTING_INL
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
+const float blurDist = 35.0f;
+const vec3 horizonColor = vec3(0.259f, 0.557f, 0.914f);
+const vec3 baseWaterColor = vec3(0.0f, 0.1f, 0.2);
+const vec3 lightPos = vec3(0.0f, 2.5f, 5.0f);
+const vec3 lightDir = vec3(1.0f, 0.0f, 1.0f);
 
-out gl_PerVertex { vec4 gl_Position; };
-layout(location = 0) out vec4 vertexPos;
-layout(location = 1) out vec3 vertexNormal;
+float sigm(const float x, const float alpha) { return 1.0f / (1.0f + exp(-alpha * x)); }
 
-layout(binding = 0) uniform Matrices
-{
-    mat4 view;
-    mat4 proj;
-}
-mvp;
-
-void main()
-{
-    gl_Position = mvp.proj * mvp.view * vec4(vec3(position.x, position.y, position.z), 1.0f);
-    gl_Position.y = -gl_Position.y;
-
-    vertexNormal = normal;
-    vertexPos = vec4(position, gl_Position.z);
-}
+#endif // LIGHTING_INL

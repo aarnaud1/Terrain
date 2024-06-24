@@ -136,8 +136,12 @@ class TerrainEngine
     vkw::Swapchain swapchain_{};
 
     // Sync objects
+    vkw::Semaphore terrainGeneratedSemaphore_{};
+    vkw::Semaphore waterGeneratedSemaphore_{};
     vkw::Semaphore imageAvailableSemaphore_{};
     vkw::Semaphore renderFinishedSemaphore_{};
+
+    vkw::Event frameBufferUpdatedEvent_{};
 
     vkw::Fence graphicsFence_{};
 
@@ -153,8 +157,5 @@ class TerrainEngine
     void allocateUBO(const uint32_t imageCount);
     void allocateDescriptorPools(const uint32_t imageCount);
     void allocateGraphicsCommandBuffers(const uint32_t imageCount);
-
-    void renderReflectionTexture(const uint32_t frameId);
-    void renderRefractionTexture(const uint32_t frameId);
 };
 } // namespace cg

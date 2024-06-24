@@ -17,19 +17,14 @@
 
 #version 450 core
 
-layout(location = 0) in vec3 vertexPos;
+layout(location = 0) in vec4 vertexPos;
 layout(location = 1) in vec3 vertexNormal;
-
-layout(location = 0) out vec4 fragColor;
 
 layout(binding = 1) uniform sampler2D colorSampler;
 
-// TODO : try to use spec constants
-const float blurDist = 25.0f;
-const vec3 horizonColor = vec3(0.259f, 0.557f, 0.914f);
-const vec3 baseWaterColor = vec3(0.0f, 0.1f, 0.2);
+layout(location = 0) out vec4 fragColor;
 
-float sigm(const float x, const float alpha) { return 1.0f / (1.0f + exp(-alpha * x)); }
+#include "lighting.inl"
 
 layout(push_constant) uniform PushConstants
 {
@@ -40,24 +35,23 @@ pcs;
 
 void main()
 {
-    const float shininess = 50.0f;
-    const vec3 L = normalize(vec3(1.0f, 0.0f, 1.0f));
+    const float shininess = 30.0f;
+    const vec3 L = normalize(lightPos - vertexPos.xyz);
     const vec3 N = normalize(vertexNormal);
     const vec3 R = reflect(L, N);
-    const vec3 V = normalize(-vertexPos);
+    const vec3 V = normalize(-vertexPos.xyz);
     float specAngle = max(dot(R, V), 0.0);
     const float specular = pow(specAngle, shininess);
 
     const vec3 reflectColor
         = texture(colorSampler, vec2(gl_FragCoord.x / pcs.width, gl_FragCoord.y / pcs.height)).rgb;
-    const vec3 waterColor = 0.6f * baseWaterColor + 0.4f * reflectColor;
-    const float lambertian = max(dot(N, L), 0.0f);
+    const vec3 waterColor = 0.8f * baseWaterColor + 0.2f * reflectColor;
+    const float lambertian = max(dot(N, normalize(lightDir)), 0.0f);
     const vec3 ambiantColor = 0.1f * waterColor.xyz;
-    const vec3 diffuseColor = 0.9f * waterColor.xyz;
-    const vec3 specularColor = 0.2f * waterColor.xyz;
+    const vec3 diffuseColor = 0.7f * waterColor.xyz;
+    const vec3 specularColor = vec3(1.0f, 1.0f, 1.0f);
     const vec3 color = ambiantColor + lambertian * diffuseColor + specular * specularColor;
 
-    const float blurFact = sigm(vertexPos.z - blurDist, 1.0f);
-    // fragColor = vec4(mix(color, horizonColor, blurFact), 0.8f);
+    const float blurFact = sigm(vertexPos.t - blurDist, 1.0f);
     fragColor = vec4(mix(color, horizonColor, blurFact), 1.0f);
 }
