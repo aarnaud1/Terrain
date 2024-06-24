@@ -110,7 +110,6 @@ class TerrainGenerator
 
     size_t sizeX_{0};
     size_t sizeY_{0};
-    // glm::vec3 scale_{1.0f, 1.0f, 1.0f};
     glm::vec3 resolution_{1.0f, 1.0f, 1.0f};
     float heightWaveLength_{1.0f};
     float moistureWaveLength_{1.0f};
