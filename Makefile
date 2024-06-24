@@ -19,7 +19,7 @@ DEFINES   := -DGLM_FORCE_RADIANS -DGLM_FORCE_DEPTH_ZERO_TO_ONE
 IFLAGS    := -I./include -I./Vulkan/include/ -I/usr/include/opencv4
 LFLAGS    := -L./Vulkan/output/lib -Wl,-rpath,./Vulkan/output/lib -lVkWrappers \
              -lopencv_core -lopencv_highgui -lopencv_imgcodecs -lopencv_imgproc \
-			 -lglfw -lvulkan
+			 -ltinyply -lglfw -lvulkan
 
 SHADERS_SPV := $(patsubst shaders/%.comp,output/spv/%_comp.spv,$(wildcard shaders/*.comp)) \
                $(patsubst shaders/%.vert,output/spv/%_vert.spv,$(wildcard shaders/*.vert)) \
