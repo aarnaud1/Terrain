@@ -43,7 +43,9 @@ TerrainGeneratorGPU::TerrainGeneratorGPU(vkw::Device& device)
     : device_{&device}
     , initFacesProgram_{device, "output/spv/initFaces_comp.spv"}
     , initWaterFacesProgram_{device, "output/spv/initFaces_comp.spv"}
-    , computeMapsProgram_{device, "output/spv/computeMaps_comp.spv"}
+    , computeHeightMapProgram_{device, "output/spv/computeMaps_comp.spv"}
+    , computeMoistureMapProgram_{device, "output/spv/computeMaps_comp.spv"}
+    , computeWaterMapProgram_{device, "output/spv/computeMaps_comp.spv"}
     , computeColorsProgram_{device, "output/spv/computeColors_comp.spv"}
     , computeVerticesProgram_{device, "output/spv/computeVertices_comp.spv"}
     , computeWaterProgram_{device, "output/spv/computeWater_comp.spv"}
@@ -56,14 +58,22 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
     // srand(time(NULL));
     const float heightRandomSeed = 2.0f * seedRange * double(rand()) / double(RAND_MAX);
     const float moistRandomSeed = 2.0f * seedRange * double(rand()) / double(RAND_MAX);
+    const float waterRandomSeed = 2.0f * seedRange * double(rand()) / double(RAND_MAX);
 
     sizeX_ = sizeX;
     sizeY_ = sizeY;
+
+    waterSizeX_ = uint32_t((float(sizeX_) * terrainResolution_) / waterResolution_);
+    waterSizeY_ = uint32_t((float(sizeY_) * terrainResolution_) / waterResolution_);
+    const uint32_t waterVertexCount = waterSizeX_ * waterSizeY_;
+    const uint32_t waterFaceCount = 2 * (waterSizeX_ - 1) * (waterSizeY_ - 1);
 
     const uint32_t mapSize = sizeX_ * sizeY_;
     mapsMemory_.init(*device_, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     heightMap_ = &mapsMemory_.createBuffer<float>(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, mapSize);
     moistureMap_ = &mapsMemory_.createBuffer<float>(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, mapSize);
+    waterMap_ = &mapsMemory_.createBuffer<float>(
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, waterSizeX_ * waterSizeY_);
     mapsMemory_.allocate();
 
     const uint32_t vertexCount = sizeX_ * sizeY_;
@@ -71,11 +81,6 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
 
     const uint32_t faceCount = 2 * (sizeX_ - 1) * (sizeY_ - 1);
     facesMemory_.init(*device_, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    waterSizeX_ = uint32_t((float(sizeX_) * terrainResolution_) / waterResolution_);
-    waterSizeY_ = uint32_t((float(sizeY_) * terrainResolution_) / waterResolution_);
-    const uint32_t waterVertexCount = waterSizeX_ * waterSizeY_;
-    const uint32_t waterFaceCount = 2 * (waterSizeX_ - 1) * (waterSizeY_ - 1);
 
 #ifdef DEBUG_TERRAIN
     vertices_ = &vertexMemory_.createBuffer<glm::vec3>(
@@ -146,9 +151,17 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
         .pushConstantsRange(sizeof(initFacesConstants_))
         .create();
 
-    computeMapsProgram_.bindStorageBuffers(*heightMap_, *moistureMap_)
-        .spec(maxComputeBlockSize, heightRandomSeed, moistRandomSeed)
-        .pushConstantsRange(sizeof(computeMapConstants_))
+    computeHeightMapProgram_.bindStorageBuffers(*heightMap_)
+        .spec(maxComputeBlockSize, heightRandomSeed)
+        .pushConstantsRange(sizeof(ComputeMapConstants))
+        .create();
+    computeMoistureMapProgram_.bindStorageBuffers(*moistureMap_)
+        .spec(maxComputeBlockSize, moistRandomSeed)
+        .pushConstantsRange(sizeof(ComputeMapConstants))
+        .create();
+    computeWaterMapProgram_.bindStorageBuffers(*waterMap_)
+        .spec(maxComputeBlockSize, waterRandomSeed)
+        .pushConstantsRange(sizeof(ComputeMapConstants))
         .create();
 
     computeColorsProgram_.bindStorageBuffers(*heightMap_, *moistureMap_, *colors_)
@@ -166,7 +179,7 @@ void TerrainGeneratorGPU::initStorage(const uint32_t sizeX, const uint32_t sizeY
         .pushConstantsRange(sizeof(initFacesConstants_))
         .create();
 
-    computeWaterProgram_.bindStorageBuffers(*waterVertices_, *waterNormals_)
+    computeWaterProgram_.bindStorageBuffers(*waterMap_, *waterVertices_, *waterNormals_)
         .spec(maxComputeBlockSize)
         .pushConstantsRange(sizeof(computeWaterConstants_))
         .create();
@@ -192,15 +205,33 @@ void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, con
 
     // Fill push constants
     const float baseDim = refDist_ / terrainResolution_;
-    computeMapConstants_.sizeX = sizeX_;
-    computeMapConstants_.sizeY = sizeY_;
-    computeMapConstants_.heightWaveLength = 0.2f * baseDim;
-    computeMapConstants_.moistureWaveLength = 0.5f * baseDim;
-    computeMapConstants_.heightOctaves = 10;
-    computeMapConstants_.moistureOctaves = 6;
-    computeMapConstants_.offX = offsetX / terrainResolution_;
-    computeMapConstants_.offY = offsetY / terrainResolution_;
-    computeMapConstants_.theta = glm::radians(theta);
+
+    ComputeMapConstants computeHeightMapConstants;
+    computeHeightMapConstants.sizeX = sizeX_;
+    computeHeightMapConstants.sizeY = sizeY_;
+    computeHeightMapConstants.octaves = 10;
+    computeHeightMapConstants.waveLength = 0.2f * baseDim;
+    computeHeightMapConstants.offX = offsetX / terrainResolution_;
+    computeHeightMapConstants.offY = offsetY / terrainResolution_;
+    computeHeightMapConstants.theta = glm::radians(theta);
+
+    ComputeMapConstants computeMoistureMapConstants;
+    computeMoistureMapConstants.sizeX = sizeX_;
+    computeMoistureMapConstants.sizeY = sizeY_;
+    computeMoistureMapConstants.octaves = 8;
+    computeMoistureMapConstants.waveLength = 0.5f * baseDim;
+    computeMoistureMapConstants.offX = offsetX / terrainResolution_;
+    computeMoistureMapConstants.offY = offsetY / terrainResolution_;
+    computeMoistureMapConstants.theta = glm::radians(theta);
+
+    ComputeMapConstants computeWaterMapConstants;
+    computeWaterMapConstants.sizeX = waterSizeX_;
+    computeWaterMapConstants.sizeY = waterSizeY_;
+    computeWaterMapConstants.octaves = 2;
+    computeWaterMapConstants.waveLength = 0.01f * baseDim;
+    computeWaterMapConstants.offX = offsetX / waterResolution_;
+    computeWaterMapConstants.offY = offsetY / waterResolution_;
+    computeWaterMapConstants.theta = glm::radians(theta);
 
     computeVerticesConstants_.sizeX = sizeX_;
     computeVerticesConstants_.sizeY = sizeY_;
@@ -216,7 +247,11 @@ void TerrainGeneratorGPU::generate(const float offsetX, const float offsetY, con
 
     auto cmdBuffer = computeCommandPool_.createCommandBuffer();
     cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
-        .bindComputeProgram(computeMapsProgram_, computeMapConstants_)
+        .bindComputeProgram(computeHeightMapProgram_, computeHeightMapConstants)
+        .dispatch(vkw::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
+        .bindComputeProgram(computeMoistureMapProgram_, computeMoistureMapConstants)
+        .dispatch(vkw::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
+        .bindComputeProgram(computeWaterMapProgram_, computeWaterMapConstants)
         .dispatch(vkw::divUp(sizeX_ * sizeY_, maxComputeBlockSize))
         .bufferMemoryBarriers(
             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,

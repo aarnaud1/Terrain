@@ -17,95 +17,19 @@
 
 #version 450 core
 
-#define MAX_PRIME_INDEX 10
-
-#define INTERPOLATION_TYPE_LINEAR 0
-#define INTERPOLATION_TYPE_COSINE 1
-
-int primes[MAX_PRIME_INDEX][3]
-    = {{995615039, 600173719, 701464987},
-       {831731269, 162318869, 136250887},
-       {174329291, 946737083, 245679977},
-       {362489573, 795918041, 350777237},
-       {457025711, 880830799, 909678923},
-       {787070341, 177340217, 593320781},
-       {405493717, 291031019, 391950901},
-       {458904767, 676625681, 424452397},
-       {531736441, 939683957, 810651871},
-       {997169939, 842027887, 423882827}};
-
-#define INTERPOLATION_TYPE INTERPOLATION_TYPE_COSINE
-#if(defined INTERPOLATION_TYPE && INTERPOLATION_TYPE == INTERPOLATION_TYPE_COSINE)
-float interpolate(float a, float b, float x)
-{
-    const float ft = x * 3.1415927f;
-    const float f = (1.0f - cos(ft)) * 0.5f;
-    return a * (1 - f) + b * f;
-}
-#else
-float interpolate(const float a, const float b, const float alpha)
-{
-    return a * (1.0f - alpha) + b * alpha;
-}
-#endif
-
-float noise(const int x, const int y, const uint i)
-{
-    int n = x + y * 512;
-    n = (n << 13) ^ n;
-    return (
-        1.0f
-        - ((n * (n * n * primes[i][0] + primes[i][1]) + primes[i][2]) & 0x7fffffff)
-              / 1073741824.0f);
-}
-
-float smoothNoise(const int x, const int y, const uint i)
-{
-    return 0.0625f
-               * (noise(x - 1, y - 1, i) + noise(x + 1, y - 1, i) + noise(x + 1, y + 1, i)
-                  + noise(x - 1, y + 1, i))
-           + 0.125f
-                 * (noise(x + 1, y, i) + noise(x - 1, y, i) + noise(x, y - 1, i)
-                    + noise(x, y + 1, i))
-           + 0.25f * noise(x, y, i);
-}
-
-float interpolateNoise(const float x, const float y, const uint i)
-{
-    const int intX = int(floor(x));
-    const float fracX = x - intX;
-
-    const int intY = int(floor(y));
-    const float fracY = y - intY;
-
-    const float c00 = smoothNoise(intX, intY, i);
-    const float c10 = smoothNoise(intX + 1, intY, i);
-    const float c01 = smoothNoise(intX, intY + 1, i);
-    const float c11 = smoothNoise(intX + 1, intY + 1, i);
-
-    const float c0 = interpolate(c00, c10, fracX);
-    const float c1 = interpolate(c01, c11, fracX);
-
-    return interpolate(c0, c1, fracY);
-}
-
-// -------------------------------------------------------------------------------------------------
+#include "noise.inl"
 
 layout(local_size_x_id = 0) in;
-layout(constant_id = 1) const float heightRandomSeed = 0.0f;
-layout(constant_id = 2) const float moistureRandomSeed = 0.0f;
+layout(constant_id = 1) const float randomSeed = 0.0f;
 
-layout(binding = 0) buffer restrict writeonly HeightMap { float heightMap[]; };
-layout(binding = 1) buffer restrict writeonly MoistureMap { float moistureMap[]; };
+layout(binding = 0) buffer restrict writeonly NoiseMap { float noiseMap[]; };
 
 layout(push_constant) uniform PushConstants
 {
     uint sizeX;
     uint sizeY;
-    uint heightOctaves;
-    uint moistureOctaves;
-    float heightWaveLength;
-    float moistureWaveLength;
+    uint octaves;
+    float waveLength;
     float offX;
     float offY;
     float theta;
@@ -123,34 +47,100 @@ void main()
         const int j = int(idx) % int(sizeX);
 
         const float x = float(j - int(sizeX / 2));
-        const float y = float(i /*- int(sizeY / 2)*/);
+        const float y = float(i);
         const float X = cosTheta * x + sinTheta * y + offX;
         const float Y = -sinTheta * x + cosTheta * y + offY;
 
-        float tmp0 = 0.0f;
-        float amp0 = 1.0f;
-        float freq0 = 1.0f / heightWaveLength;
-        for(uint octave = 0; octave < heightOctaves; ++octave)
+        float tmp = 0.0f;
+        float amp = 1.0f;
+        float freq = 1.0f / waveLength;
+        for(uint octave = 0; octave < octaves; ++octave)
         {
-            const float tmpHeight = interpolateNoise(
-                X * freq0, (Y + heightRandomSeed) * freq0, octave % MAX_PRIME_INDEX);
-            tmp0 += amp0 * tmpHeight;
-            freq0 *= 2.0f;
-            amp0 *= 0.5f;
+            const float tmpHeight
+                = interpolateNoise(X * freq, (Y + randomSeed) * freq, octave % MAX_PRIME_INDEX);
+            tmp += amp * tmpHeight;
+            freq *= 2.0f;
+            amp *= 0.5f;
         }
-        heightMap[idx] = tmp0 + 0.3f;
-
-        float tmp1 = 0.0f;
-        float amp1 = 1.0f;
-        float freq1 = 1.0f / moistureWaveLength;
-        for(uint octave = 0; octave < moistureOctaves; ++octave)
-        {
-            const float tmpMoisture = interpolateNoise(
-                X * freq1, (Y + moistureRandomSeed) * freq1, octave % MAX_PRIME_INDEX);
-            tmp1 += amp1 * tmpMoisture;
-            freq1 *= 2.0f;
-            amp1 *= 0.5f;
-        }
-        moistureMap[idx] = tmp1 + 0.3f;
+        noiseMap[idx] = tmp + 0.3f;
     }
 }
+
+/*
+layout(local_size_x_id = 0) in;
+layout(constant_id = 1) const float heightRandomSeed = 0.0f;
+layout(constant_id = 2) const float moistureRandomSeed = 0.0f;
+layout(constant_id = 3) const float waterRandomSeed = 0.0f;
+
+layout(binding = 0) buffer restrict writeonly HeightMap { float heightMap[]; };
+layout(binding = 1) buffer restrict writeonly MoistureMap { float moistureMap[]; };
+layout(binding = 2) buffer restrict writeonly WaterMap { float waterMap[]; };
+
+layout(push_constant) uniform PushConstants
+{
+    uint sizeX;
+    uint sizeY;
+    uint heightOctaves;
+    uint moistureOctaves;
+    uint waterOctaves;
+    float heightWaveLength;
+    float moistureWaveLength;
+    float waterWaveLength;
+    float offX;
+    float offY;
+    float theta;
+};
+
+void main()
+{
+    const float cosTheta = cos(-theta);
+    const float sinTheta = sin(-theta);
+
+    for(uint idx = gl_GlobalInvocationID.x; idx < sizeX * sizeY;
+        idx += gl_WorkGroupSize.x * gl_NumWorkGroups.x)
+    {
+        const int i = int(idx) / int(sizeX);
+        const int j = int(idx) % int(sizeX);
+
+        const float x = float(j - int(sizeX / 2));
+        const float y = float(i);
+const float X = cosTheta * x + sinTheta * y + offX;
+const float Y = -sinTheta * x + cosTheta * y + offY;
+
+float tmp0 = 0.0f;
+float amp0 = 1.0f;
+float freq0 = 1.0f / heightWaveLength;
+for(uint octave = 0; octave < heightOctaves; ++octave)
+{
+    const float tmpHeight
+        = interpolateNoise(X * freq0, (Y + heightRandomSeed) * freq0, octave % MAX_PRIME_INDEX);
+    tmp0 += amp0 * tmpHeight;
+    freq0 *= 2.0f;
+    amp0 *= 0.5f;
+}
+heightMap[idx] = tmp0 + 0.3f;
+
+float tmp1 = 0.0f;
+float amp1 = 1.0f;
+float freq1 = 1.0f / moistureWaveLength;
+for(uint octave = 0; octave < moistureOctaves; ++octave)
+{
+    const float tmpMoisture
+        = interpolateNoise(X * freq1, (Y + moistureRandomSeed) * freq1, octave %
+MAX_PRIME_INDEX); tmp1 += amp1 * tmpMoisture; freq1 *= 2.0f; amp1 *= 0.5f;
+}
+moistureMap[idx] = tmp1 + 0.3f;
+
+float tmp2 = 0.0f;
+float amp2 = 1.0f;
+float freq2 = 1.0f / waterWaveLength;
+for(uint octave = 0; octave < waterOctaves; ++octave)
+{
+    const float tmpHeight
+        = interpolateNoise(X * freq1, (Y + moistureRandomSeed) * freq1, octave %
+MAX_PRIME_INDEX); tmp1 += amp1 * tmpHeight; freq1 *= 2.0f; amp1 *= 0.5f;
+}
+waterMap[idx] = tmp1 + 0.3f;
+}
+}
+*/

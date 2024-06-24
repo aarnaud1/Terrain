@@ -31,7 +31,7 @@ float sigm(const float x, const float alpha) { return 1.0f / (1.0f + exp(-alpha 
 
 void main()
 {
-    const float shininess = 5.0f;
+    const float shininess = 50.0f;
     const vec3 L = normalize(vec3(1.0f, 0.0f, 1.0f));
     const vec3 N = normalize(vertexNormal);
     const vec3 R = reflect(L, N);

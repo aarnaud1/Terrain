@@ -15,6 +15,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#ifndef COMMON_INL
+#define COMMON_INL
+
 vec3 getNormal(const vec3 p, const vec3 px0, const vec3 px1, const vec3 py0, const vec3 py1)
 {
     const vec3 n0 = cross(px1, py1);
@@ -24,3 +27,5 @@ vec3 getNormal(const vec3 p, const vec3 px0, const vec3 px1, const vec3 py0, con
 
     return normalize(n0 + n1 + n2 + n3);
 }
+
+#endif // COMMON_INL

@@ -63,7 +63,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     std::unique_ptr<cg::TerrainEngine> engine(new cg::TerrainEngine(window, initWidth, initHeight));
     engine->setRefDistance(20.0f);
-    engine->setBaseResolution(0.05f);
+    engine->setBaseResolution(0.02f);
     engine->setFarDistance(30.0f);
     engine->setFov(45.0f);
     engine->prepare();

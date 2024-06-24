@@ -106,4 +106,4 @@ uvec3 getColor(const float e, const float m)
     }
     return TROPICAL_RAIN_FOREST;
 }
-#endif
+#endif // BIOME_INL

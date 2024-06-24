@@ -46,12 +46,14 @@ pcs;
 
 void main()
 {
+    gl_ClipDistance[0] = dot(pcs.model * vec4(position, 1.0f), pcs.clipPlane);
+
     gl_Position = mvp.proj * mvp.view * pcs.model * vec4(position, 1.0f);
     gl_Position.y = -gl_Position.y;
-    vertexColor = color;
-    vertexNormal = vec3(mvp.view * pcs.model * vec4(normal, 0.0f));
-    vertexNormal.y = -vertexNormal.y;
     vertexPos = gl_Position.xyz;
 
-    gl_ClipDistance[0] = dot(vec4(position, 1.0f), pcs.clipPlane);
+    vertexColor = color;
+
+    vertexNormal = vec3(mvp.view * pcs.model * vec4(normal, 0.0f));
+    vertexNormal.y = -vertexNormal.y;
 }

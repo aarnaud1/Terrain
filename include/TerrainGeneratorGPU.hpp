@@ -100,6 +100,7 @@ class TerrainGeneratorGPU
     vkw::Memory mapsMemory_{};
     vkw::Buffer<float>* heightMap_{nullptr};
     vkw::Buffer<float>* moistureMap_{nullptr};
+    vkw::Buffer<float>* waterMap_{nullptr};
 
 #ifdef DEBUG_TERRAIN
     vk::Memory verticesStagingMem_{};
@@ -127,19 +128,19 @@ class TerrainGeneratorGPU
     vkw::ComputeProgram initFacesProgram_;
     vkw::ComputeProgram initWaterFacesProgram_;
 
-    struct
+    struct ComputeMapConstants
     {
         uint32_t sizeX;
         uint32_t sizeY;
-        uint32_t heightOctaves;
-        uint32_t moistureOctaves;
-        float heightWaveLength;
-        float moistureWaveLength;
+        uint32_t octaves;
+        float waveLength;
         float offX;
         float offY;
         float theta;
-    } computeMapConstants_;
-    vkw::ComputeProgram computeMapsProgram_;
+    };
+    vkw::ComputeProgram computeHeightMapProgram_;
+    vkw::ComputeProgram computeMoistureMapProgram_;
+    vkw::ComputeProgram computeWaterMapProgram_;
 
     struct
     {

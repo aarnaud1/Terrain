@@ -106,10 +106,18 @@ class TerrainEngine
     };
     uint32_t terrainRenderConstantsOffset_;
 
+    struct WaterRenderConstants
+    {
+        float width;
+        float height;
+    };
+    uint32_t waterRenderConstantsOffset_;
+
     vkw::PipelineLayout graphicsLayout_{};
-    vkw::GraphicsPipeline graphicsPipeline_{};
+    vkw::GraphicsPipeline terrainGraphicsPipeline_{};
     vkw::GraphicsPipeline offScreenPipeline_{};
-    std::vector<vkw::DescriptorPool> graphicsPools_{};
+    std::vector<vkw::DescriptorPool> terrainDescriptorPools_{};
+    std::vector<vkw::DescriptorPool> waterDescriptorPools_{};
 
     vkw::PipelineLayout waterLayout_{};
     vkw::GraphicsPipeline waterGraphicsPipeline_{};
@@ -117,14 +125,13 @@ class TerrainEngine
 
     vkw::ColorRenderTarget reflectionColorAttachment_{};
     vkw::DepthRenderTarget reflectionDepthAttachment_{};
-    vkw::RenderPass reflectionRenderpass_{};
     vkw::Framebuffer reflectionFramebuffer_{};
 
     vkw::ColorRenderTarget refractionColorAttachment_{};
     vkw::DepthRenderTarget refractionDepthAttachment_{};
-    vkw::RenderPass refractionRenderpass_{};
     vkw::Framebuffer refractionFramebuffer_{};
 
+    vkw::RenderPass offscreenRenderpass_{};
     vkw::RenderPass renderpass_{};
     vkw::Swapchain swapchain_{};
 

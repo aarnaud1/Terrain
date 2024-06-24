@@ -16,12 +16,15 @@
  */
 
 #version 450 core
+
 #include "common.inl"
+#include "noise.inl"
 
 layout(local_size_x_id = 0) in;
 
-layout(binding = 0) buffer restrict Vertices { float vertices[]; };
-layout(binding = 1) buffer restrict Normals { float normals[]; };
+layout(binding = 0) buffer restrict readonly WaterMap { float waterMap[]; };
+layout(binding = 1) buffer restrict writeonly Vertices { float vertices[]; };
+layout(binding = 2) buffer restrict writeonly Normals { float normals[]; };
 
 layout(push_constant) uniform PushConstants
 {
@@ -33,11 +36,12 @@ layout(push_constant) uniform PushConstants
 
 vec3 getVertex(const int x, const int y, const int idx)
 {
+    const float amp = 0.01f;
     if(x >= 0 && x < sizeX && y >= 0 && y < sizeY)
     {
         const float x0 = triangleRes * float(x - int(sizeX / 2));
-        const float y0 = triangleRes * float(y);
-        const float z = 0.1f * zScale; // TODO : compute z
+        const float y0 = triangleRes * float(y /*- int(sizeY / 2)*/);
+        const float z = amp * waterMap[idx] * zScale + 0.25f;
 
         return vec3(x0, y0, z);
     }
