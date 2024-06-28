@@ -38,6 +38,7 @@ class TerrainGeneratorGPU
     void setRefDistance(const float dist) { refDist_ = dist; }
     void setBaseResolution(const float res) { terrainResolution_ = res; }
     void setWaterResolution(const float res) { waterResolution_ = res; }
+    void setVerticalScale(const float scale) { verticalScale_ = scale; }
 
     void initStorage(const uint32_t sizeX, const uint32_t sizeY);
     void generate(
@@ -82,6 +83,7 @@ class TerrainGeneratorGPU
     float refDist_{1.0f};
     float terrainResolution_{1.0f};
     float waterResolution_{0.5f};
+    float verticalScale_{1.0f};
 
     uint32_t sizeX_;
     uint32_t sizeY_;

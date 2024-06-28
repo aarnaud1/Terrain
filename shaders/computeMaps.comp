@@ -52,16 +52,18 @@ void main()
         const float Y = -sinTheta * x + cosTheta * y + offY;
 
         float tmp = 0.0f;
-        float amp = 1.0f;
+        float amp = 2.0f;
         float freq = 1.0f / waveLength;
+        float scale = 0.0f;
         for(uint octave = 0; octave < octaves; ++octave)
         {
             const float tmpHeight
                 = interpolateNoise(X * freq, (Y + randomSeed) * freq, octave % MAX_PRIME_INDEX);
             tmp += amp * tmpHeight;
             freq *= 2.0f;
+            scale += amp;
             amp *= 0.5f;
         }
-        noiseMap[idx] = tmp + 0.3f;
+        noiseMap[idx] = tmp + 0.5f;
     }
 }

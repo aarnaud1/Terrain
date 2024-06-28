@@ -218,7 +218,7 @@ void TerrainGeneratorGPU::updateCommandBuffers(
     computeVerticesConstants.sizeX = sizeX_;
     computeVerticesConstants.sizeY = sizeY_;
     computeVerticesConstants.triangleRes = terrainResolution_;
-    computeVerticesConstants.zScale = 2.5f;
+    computeVerticesConstants.zScale = verticalScale_;
 
     computeTerrainCommandBuffer_.reset();
     computeTerrainCommandBuffer_.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)

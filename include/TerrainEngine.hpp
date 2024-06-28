@@ -48,6 +48,7 @@ class TerrainEngine
     }
     void setFarDistance(const float dist) { farDistance_ = dist; }
     void setFov(const float fov) { fov_ = fov; }
+    void setVerticalScale(const float scale) { generator_.setVerticalScale(scale); }
 
     void prepare();
 

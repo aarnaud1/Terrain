@@ -62,10 +62,11 @@ int main(int /*argc*/, char** /*argv*/)
     // glfwSetCursorPosCallback(window, mouseCallback);
 
     std::unique_ptr<cg::TerrainEngine> engine(new cg::TerrainEngine(window, initWidth, initHeight));
-    engine->setRefDistance(20.0f);
+    engine->setRefDistance(40.0f);
     engine->setBaseResolution(0.02f);
     engine->setFarDistance(40.0f);
     engine->setFov(45.0f);
+    engine->setVerticalScale(2.5f);
     engine->prepare();
 
     fprintf(stdout, "Starting the main loop\n");
