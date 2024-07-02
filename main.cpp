@@ -26,16 +26,12 @@ static void mainLoop(GLFWwindow* window, cg::TerrainEngine* engine);
 
 static void errorCallback(int error, const char* msg);
 static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-// static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
-
-float offsetX = 0.0f;
-float offsetY = 0.0f;
-float theta = 0.0f;
+static void mouseCallback(GLFWwindow* window, double xpos, double ypos);
 
 int main(int /*argc*/, char** /*argv*/)
 {
-    const uint32_t initWidth = 1024;
-    const uint32_t initHeight = 768;
+    int32_t initWidth;
+    int32_t initHeight;
 
     if(!glfwInit())
     {
@@ -50,16 +46,31 @@ int main(int /*argc*/, char** /*argv*/)
     }
     glfwSetErrorCallback(errorCallback);
 
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    initWidth = mode->width;
+    initHeight = mode->height;
+
+    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    GLFWwindow* window = glfwCreateWindow(initWidth, initHeight, "Terrain", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(
+        static_cast<uint32_t>(initWidth),
+        static_cast<uint32_t>(initHeight),
+        "Terrain",
+        monitor,
+        nullptr);
     if(!window)
     {
         fprintf(stderr, "Error creating window, terminating\n");
         return EXIT_FAILURE;
     }
 
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetKeyCallback(window, keyCallback);
-    // glfwSetCursorPosCallback(window, mouseCallback);
+    glfwSetCursorPosCallback(window, mouseCallback);
 
     std::unique_ptr<cg::TerrainEngine> engine(new cg::TerrainEngine(window, initWidth, initHeight));
     engine->setRefDistance(40.0f);
@@ -85,39 +96,51 @@ bool incrementX = false;
 bool incrementY = false;
 bool decrementX = false;
 bool decrementY = false;
-bool incrementTheta = false;
+
+static constexpr float thetaInc = 10.0f;
+double prevX, prevY;
+float theta = 0.0f;
+
+static constexpr float dx = 0.25f;
+static constexpr float dy = 0.25f;
+float offsetX = 0.0f;
+float offsetY = 0.0f;
 
 void mainLoop(GLFWwindow* window, cg::TerrainEngine* engine)
 {
-    engine->renderFrame(true);
+    engine->renderFrame();
+
+    glfwGetCursorPos(window, &prevX, &prevY);
     while(!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
+        const float cosTheta = glm::cos(glm::radians(theta));
+        const float sinTheta = glm::sin(glm::radians(theta));
+
         if(incrementX)
         {
-            offsetX += 0.1f;
+            offsetX += dx * cosTheta;
+            offsetY += dy * sinTheta;
         }
         if(incrementY)
         {
-            offsetY += 0.1f;
+            offsetX += dx * -sinTheta;
+            offsetY += dy * cosTheta;
         }
 
         if(decrementX)
         {
-            offsetX -= 0.1f;
+            offsetX -= dx * cosTheta;
+            offsetY -= dy * sinTheta;
         }
         if(decrementY)
         {
-            offsetY -= 0.1f;
+            offsetX -= dx * -sinTheta;
+            offsetY -= dy * cosTheta;
         }
 
         engine->setOffset(offsetX, offsetY, theta);
-        engine->renderFrame(incrementX || incrementY || decrementX || decrementY || incrementTheta);
-
-        if(incrementTheta)
-        {
-            incrementTheta = false;
-        }
+        engine->renderFrame();
     }
 }
 
@@ -130,44 +153,51 @@ void keyCallback(GLFWwindow* window, int key, int /*scancode*/, int action, int 
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
 
-    if(key == GLFW_KEY_RIGHT && (action == GLFW_PRESS))
+    if((key == GLFW_KEY_RIGHT || key == GLFW_KEY_D) && (action == GLFW_PRESS))
     {
         incrementX = true;
     }
-    if(key == GLFW_KEY_RIGHT && (action == GLFW_RELEASE))
+    if((key == GLFW_KEY_RIGHT || key == GLFW_KEY_D) && (action == GLFW_RELEASE))
     {
         incrementX = false;
     }
 
-    if(key == GLFW_KEY_LEFT && (action == GLFW_PRESS))
+    if((key == GLFW_KEY_LEFT || key == GLFW_KEY_A) && (action == GLFW_PRESS))
     {
         decrementX = true;
     }
-    if(key == GLFW_KEY_LEFT && (action == GLFW_RELEASE))
+    if((key == GLFW_KEY_LEFT || key == GLFW_KEY_A) && (action == GLFW_RELEASE))
     {
         decrementX = false;
     }
 
-    if(key == GLFW_KEY_UP && (action == GLFW_PRESS))
+    if((key == GLFW_KEY_UP || key == GLFW_KEY_W) && (action == GLFW_PRESS))
     {
         incrementY = true;
     }
-    if(key == GLFW_KEY_UP && (action == GLFW_RELEASE))
+    if((key == GLFW_KEY_UP || key == GLFW_KEY_W) && (action == GLFW_RELEASE))
     {
         incrementY = false;
     }
 
-    if(key == GLFW_KEY_DOWN && (action == GLFW_PRESS))
+    if((key == GLFW_KEY_DOWN || key == GLFW_KEY_S) && (action == GLFW_PRESS))
     {
         decrementY = true;
     }
-    if(key == GLFW_KEY_DOWN && (action == GLFW_RELEASE))
+    if((key == GLFW_KEY_DOWN || key == GLFW_KEY_S) && (action == GLFW_RELEASE))
     {
         decrementY = false;
     }
 }
 
-// void mouseCallback(GLFWwindow* window, double xpos, double ypos) 
-// {
-//     const float thetaScale = xPos - 
-// }
+void mouseCallback(GLFWwindow* window, double xpos, double ypos)
+{
+    int w, h;
+    glfwGetWindowSize(window, &w, &h);
+
+    const double dx = (xpos - prevX) / (w / 2);
+
+    theta -= thetaInc * float(dx);
+    prevX = xpos;
+    prevY = ypos;
+}

@@ -52,7 +52,7 @@ class TerrainEngine
 
     void prepare();
 
-    void renderFrame(const bool generateTerrain);
+    void renderFrame();
 
     void setOffset(const float offsetX, const float offsetY, const float theta)
     {
@@ -84,8 +84,8 @@ class TerrainEngine
 
     struct MatrixBlock
     {
-        glm::mat4 view;
-        glm::mat4 proj;
+        alignas(16) glm::mat4 view;
+        alignas(16) glm::mat4 proj;
     };
     std::unique_ptr<vkw::Memory> uboMemory_{nullptr};
     std::vector<vkw::Buffer<MatrixBlock>*> uboBuffers_{};
@@ -112,6 +112,7 @@ class TerrainEngine
     {
         float width;
         float height;
+        alignas(16) glm::mat4 view;
     };
     uint32_t waterRenderConstantsOffset_;
 

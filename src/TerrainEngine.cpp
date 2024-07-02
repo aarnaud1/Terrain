@@ -64,7 +64,7 @@ void TerrainEngine::prepare()
     graphicsFence_.init(device_, true);
 }
 
-void TerrainEngine::renderFrame(const bool /*generateTerrain*/)
+void TerrainEngine::renderFrame()
 {
     // Perform rendering
     const float theta = 90.0f;
@@ -124,7 +124,7 @@ void TerrainEngine::initStorage()
     }
 
     const float d = farDistance_ * glm::tan(glm::radians(fov_));
-    const auto sizeX = uint32_t((/*2.0f **/ d) / baseResolution_);
+    const auto sizeX = uint32_t((2.0f * d) / baseResolution_);
     const auto sizeY = uint32_t(farDistance_ / baseResolution_);
 
     fprintf(stdout, "[DEBUG]\tsizeX = %u\n", sizeX);
@@ -218,7 +218,7 @@ void TerrainEngine::initGraphicsPipeline()
         VK_SHADER_STAGE_VERTEX_BIT, sizeof(TerrainRenderConstants));
     graphicsLayout_.create();
 
-    // Offscreen rendering
+    // Offscreen renderings
     reflectionGraphicsPipeline_.init(device_);
     reflectionGraphicsPipeline_
         .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/terrainDisplay_vert.spv")
@@ -487,6 +487,11 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
         WaterRenderConstants waterRenderConstants;
         waterRenderConstants.width = float(swapchain_.getExtent().width);
         waterRenderConstants.height = float(swapchain_.getExtent().height);
+        waterRenderConstants.view = glm::transpose(glm::mat4{
+            {1.0f, 0.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f, 0.0f},
+            {0.0f, 0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f, 0.0f, 1.0f}});
 
         auto& graphicsCmdBuffer = graphicsCommandBuffers_[i];
         graphicsCmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
