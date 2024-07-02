@@ -20,7 +20,8 @@
 layout(location = 0) in vec4 vertexPos;
 layout(location = 1) in vec3 vertexNormal;
 
-layout(binding = 1) uniform sampler2D colorSampler;
+layout(binding = 1) uniform sampler2D reflectionSampler;
+layout(binding = 2) uniform sampler2D refractionSampler;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -35,7 +36,7 @@ pcs;
 
 void main()
 {
-    const float shininess = 30.0f;
+    const float shininess = 50.0f;
     const vec3 L = normalize(lightPos - vertexPos.xyz);
     const vec3 N = normalize(vertexNormal);
     const vec3 R = reflect(L, N);
@@ -44,8 +45,13 @@ void main()
     const float specular = pow(specAngle, shininess);
 
     const vec3 reflectColor
-        = texture(colorSampler, vec2(gl_FragCoord.x / pcs.width, gl_FragCoord.y / pcs.height)).rgb;
-    const vec3 waterColor = 0.8f * baseWaterColor + 0.2f * reflectColor;
+        = texture(reflectionSampler, vec2(gl_FragCoord.x / pcs.width, gl_FragCoord.y / pcs.height))
+              .rgb;
+    const vec3 refractColor
+        = texture(refractionSampler, vec2(gl_FragCoord.x / pcs.width, gl_FragCoord.y / pcs.height))
+              .rgb;
+
+    const vec3 waterColor = 0.2f * baseWaterColor + 0.4f * refractColor + 0.4f * reflectColor;
     const float lambertian = max(dot(N, normalize(lightDir)), 0.0f);
     const vec3 ambiantColor = 0.1f * waterColor.xyz;
     const vec3 diffuseColor = 0.7f * waterColor.xyz;

@@ -99,6 +99,7 @@ class TerrainEngine
 
     std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> graphicsCommandBuffers_{};
     std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> reflectionCommandBuffers_{};
+    std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> refractionCommandBuffers_{};
 
     struct TerrainRenderConstants
     {
@@ -116,7 +117,8 @@ class TerrainEngine
 
     vkw::PipelineLayout graphicsLayout_{};
     vkw::GraphicsPipeline terrainGraphicsPipeline_{};
-    vkw::GraphicsPipeline offScreenPipeline_{};
+    vkw::GraphicsPipeline reflectionGraphicsPipeline_{};
+    vkw::GraphicsPipeline refractionGraphicsPipeline_{};
     std::vector<vkw::DescriptorPool> terrainDescriptorPools_{};
     std::vector<vkw::DescriptorPool> waterDescriptorPools_{};
 
@@ -142,7 +144,8 @@ class TerrainEngine
     vkw::Semaphore imageAvailableSemaphore_{};
     vkw::Semaphore renderFinishedSemaphore_{};
 
-    vkw::Event frameBufferUpdatedEvent_{};
+    vkw::Event reflectionFrameBufferUpdatedEvent_{};
+    vkw::Event refractionFrameBufferUpdatedEvent_{};
 
     vkw::Fence graphicsFence_{};
 

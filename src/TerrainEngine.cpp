@@ -49,7 +49,8 @@ void TerrainEngine::prepare()
     initStorage();
     initGraphicsPipeline();
 
-    frameBufferUpdatedEvent_.init(device_);
+    reflectionFrameBufferUpdatedEvent_.init(device_);
+    refractionFrameBufferUpdatedEvent_.init(device_);
 
     allocateUBO(swapchain_.imageCount());
     allocateDescriptorPools(swapchain_.imageCount());
@@ -103,6 +104,8 @@ void TerrainEngine::renderFrame(const bool /*generateTerrain*/)
         {&terrainGeneratedSemaphore_},
         {VK_PIPELINE_STAGE_VERTEX_INPUT_BIT},
         {});
+    graphicsQueue_.submit(
+        refractionCommandBuffers_[imageIndex], {}, {VK_PIPELINE_STAGE_VERTEX_INPUT_BIT}, {});
     graphicsQueue_.submit(
         graphicsCommandBuffers_[imageIndex],
         {&imageAvailableSemaphore_, &waterGeneratedSemaphore_},
@@ -216,8 +219,8 @@ void TerrainEngine::initGraphicsPipeline()
     graphicsLayout_.create();
 
     // Offscreen rendering
-    offScreenPipeline_.init(device_);
-    offScreenPipeline_
+    reflectionGraphicsPipeline_.init(device_);
+    reflectionGraphicsPipeline_
         .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/terrainDisplay_vert.spv")
         .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/terrainDisplay_frag.spv")
         .addVertexBinding(0, sizeof(glm::vec3))
@@ -226,10 +229,25 @@ void TerrainEngine::initGraphicsPipeline()
         .addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
         .addVertexAttribute(1, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0)
         .addVertexAttribute(2, 2, VK_FORMAT_R32G32B32_SFLOAT, 0);
-    offScreenPipeline_.setViewport(0.0f, 0.0f, float(width_), float(height_))
+    reflectionGraphicsPipeline_.setViewport(0.0f, 0.0f, float(width_), float(height_))
         .setScissors(0, 0, width_, height_)
         .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
         .cullFrontFaces(true)
+        .createPipeline(offscreenRenderpass_, graphicsLayout_);
+    refractionGraphicsPipeline_.init(device_);
+    refractionGraphicsPipeline_
+        .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/terrainDisplay_vert.spv")
+        .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/terrainDisplay_frag.spv")
+        .addVertexBinding(0, sizeof(glm::vec3))
+        .addVertexBinding(1, sizeof(glm::vec4))
+        .addVertexBinding(2, sizeof(glm::vec3))
+        .addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
+        .addVertexAttribute(1, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0)
+        .addVertexAttribute(2, 2, VK_FORMAT_R32G32B32_SFLOAT, 0);
+    refractionGraphicsPipeline_.setViewport(0.0f, 0.0f, float(width_), float(height_))
+        .setScissors(0, 0, width_, height_)
+        .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+        .cullFrontFaces(false)
         .createPipeline(offscreenRenderpass_, graphicsLayout_);
 
     // Terrain rendering
@@ -252,7 +270,8 @@ void TerrainEngine::initGraphicsPipeline()
     waterLayout_.init(device_, 1);
     waterLayout_.getDescriptorSetlayoutInfo(0)
         .addUniformBufferBinding(VK_SHADER_STAGE_VERTEX_BIT, 0, 1)
-        .addSamplerImageBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 1, 1);
+        .addSamplerImageBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 1, 1)
+        .addSamplerImageBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 2, 1);
     waterRenderConstantsOffset_ = waterLayout_.addPushConstantRange(
         VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(WaterRenderConstants));
     waterLayout_.create();
@@ -352,6 +371,12 @@ void TerrainEngine::allocateDescriptorPools(const uint32_t imageCount)
                 1,
                 {reflectionColorAttachment_.sampler(),
                  reflectionColorAttachment_.imageView(),
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .bindSamplerImage(
+                0,
+                2,
+                {refractionColorAttachment_.sampler(),
+                 refractionColorAttachment_.imageView(),
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
     }
 }
@@ -365,7 +390,8 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
     for(uint32_t i = 0; i < imageCount; ++i)
     {
         const uint32_t faceCount = generator_.faceCount();
-        const float waterHeight = 0.25f; // TODO : get this from terrain generator
+        const float waterHeight
+            = 0.25 + 2.0f * baseResolution_; // TODO : get this from terrain generator
 
         TerrainRenderConstants terrainRenderConstants;
         terrainRenderConstants.model = glm::transpose(glm::mat4{
@@ -383,7 +409,7 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
                 VkOffset2D{0, 0},
                 reflectionFramebuffer_.getExtent(),
                 clearColor)
-            .bindGraphicsPipeline(offScreenPipeline_)
+            .bindGraphicsPipeline(reflectionGraphicsPipeline_)
             .setViewport(0, 0, swapchain_.getExtent().width, swapchain_.getExtent().height)
             .setScissor({0, 0}, swapchain_.getExtent())
             .bindGraphicsDescriptorSets(graphicsLayout_, terrainDescriptorPools_[i])
@@ -398,7 +424,52 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             .bindIndexBuffer(generator_.faces(), VK_INDEX_TYPE_UINT32)
             .drawIndexed(3 * faceCount, 1, 0, 0, 0)
             .endRenderPass()
-            .setEvent(frameBufferUpdatedEvent_, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+            .setEvent(
+                reflectionFrameBufferUpdatedEvent_, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+            .end();
+    }
+
+    refractionCommandBuffers_.clear();
+    refractionCommandBuffers_ = graphicsCommandPool_.createCommandBuffers(imageCount);
+    for(uint32_t i = 0; i < imageCount; ++i)
+    {
+        const uint32_t faceCount = generator_.faceCount();
+        const float waterHeight
+            = 0.25f + 2.0f * baseResolution_; // TODO : get this from terrain generator
+
+        TerrainRenderConstants terrainRenderConstants;
+        terrainRenderConstants.model = glm::transpose(glm::mat4{
+            {1.0f, 0.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f, 0.0f},
+            {0.0f, 0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f, 0.0f, 1.0f}});
+        terrainRenderConstants.clipPlane = glm::vec4(0.0f, 0.0f, -1.0f, waterHeight);
+
+        auto& cmdBuffer = refractionCommandBuffers_[i];
+        cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
+            .beginRenderPass(
+                offscreenRenderpass_,
+                refractionFramebuffer_.getHandle(),
+                VkOffset2D{0, 0},
+                refractionFramebuffer_.getExtent(),
+                glm::vec4(0.0f))
+            .bindGraphicsPipeline(refractionGraphicsPipeline_)
+            .setViewport(0, 0, swapchain_.getExtent().width, swapchain_.getExtent().height)
+            .setScissor({0, 0}, swapchain_.getExtent())
+            .bindGraphicsDescriptorSets(graphicsLayout_, terrainDescriptorPools_[i])
+            .pushConstants(
+                graphicsLayout_,
+                VK_SHADER_STAGE_VERTEX_BIT,
+                terrainRenderConstantsOffset_,
+                terrainRenderConstants)
+            .bindVertexBuffer(0, generator_.vertices(), 0)
+            .bindVertexBuffer(1, generator_.colors(), 0)
+            .bindVertexBuffer(2, generator_.normals(), 0)
+            .bindIndexBuffer(generator_.faces(), VK_INDEX_TYPE_UINT32)
+            .drawIndexed(3 * faceCount, 1, 0, 0, 0)
+            .endRenderPass()
+            .setEvent(
+                refractionFrameBufferUpdatedEvent_, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
             .end();
     }
 
@@ -420,7 +491,14 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
         auto& graphicsCmdBuffer = graphicsCommandBuffers_[i];
         graphicsCmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
             .waitEvent(
-                frameBufferUpdatedEvent_,
+                reflectionFrameBufferUpdatedEvent_,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                {},
+                {},
+                {})
+            .waitEvent(
+                refractionFrameBufferUpdatedEvent_,
                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                 {},
