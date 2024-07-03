@@ -16,34 +16,35 @@
  */
 
 #version 450 core
+#include "lighting.inl"
 
-layout(location = 0) in vec4 vertexPos;
-layout(location = 1) in vec3 vertexNormal;
-
-layout(binding = 1) uniform sampler2D reflectionSampler;
-layout(binding = 2) uniform sampler2D refractionSampler;
+layout(location = 0) in vec3 vertexPos;    // In camera coordinates
+layout(location = 1) in vec3 vertexNormal; // In camera coordinates
 
 layout(location = 0) out vec4 fragColor;
 
-#include "lighting.inl"
+layout(binding = 0) uniform Matrices
+{
+    mat4 view;
+    mat4 proj;
+    mat4 invView;
+}
+mvp;
+layout(binding = 1) uniform sampler2D reflectionSampler;
+layout(binding = 2) uniform sampler2D refractionSampler;
 
 layout(push_constant) uniform PushConstants
 {
     float width;
     float height;
-    mat4 view;
+    float farDist;
+    vec4 lightPos;
 }
 pcs;
 
 void main()
 {
-    const float shininess = 50.0f;
-    const vec3 L = normalize(lightPos - vertexPos.xyz);
-    const vec3 N = normalize(vertexNormal);
-    const vec3 R = reflect(L, N);
-    const vec3 V = normalize(-vertexPos.xyz);
-    float specAngle = max(dot(R, V), 0.0);
-    const float specular = pow(specAngle, shininess);
+    const float shininess = 100.0f;
 
     const vec3 reflectColor
         = texture(reflectionSampler, vec2(gl_FragCoord.x / pcs.width, gl_FragCoord.y / pcs.height))
@@ -52,13 +53,24 @@ void main()
         = texture(refractionSampler, vec2(gl_FragCoord.x / pcs.width, gl_FragCoord.y / pcs.height))
               .rgb;
 
-    const vec3 waterColor = 0.2f * baseWaterColor + 0.4f * refractColor + 0.4f * reflectColor;
-    const float lambertian = max(dot(N, normalize(lightDir)), 0.0f);
-    const vec3 ambiantColor = 0.1f * waterColor.xyz;
-    const vec3 diffuseColor = 0.7f * waterColor.xyz;
-    const vec3 specularColor = vec3(1.0f, 1.0f, 1.0f);
-    const vec3 color = ambiantColor + lambertian * diffuseColor + specular * specularColor;
+    const vec3 org = vec3(mvp.invView[3].xyz);
+    const vec3 lightPos = vec3(org.xy, 0.0f) + pcs.farDist * pcs.lightPos.xyz;
+    const vec3 v = vec3(mvp.invView * vec4(vertexPos, 1.0f));
 
-    const float blurFact = sigm(vertexPos.t - blurDist, 1.0f);
+    const vec3 N = normalize(vec3(mvp.invView * vec4(vertexNormal, 0.0f)));
+    const vec3 L = normalize(lightPos - v);
+    const vec3 R = reflect(L, N);
+    const vec3 V = normalize(org - v);
+    // Little hack : put -dot to simulate some sun reflection
+    const float alpha = max(-dot(V, R), 0.0f);
+    const float specular = pow(alpha, shininess);
+
+    const float fact = clamp(dot(V, N), 0.0f, 1.0f);
+    const vec3 baseColor = mix(reflectColor, refractColor, fact);
+    const vec3 specularColor = vec3(1.0f, 1.0f, 1.0f);
+
+    const vec3 color = baseColor + specular * specularColor;
+    const float blurFact = sigm(length(org - V) - pcs.farDist, 1.0f);
     fragColor = vec4(mix(color, horizonColor, blurFact), 1.0f);
+    fragColor = vec4(color, 1.0f);
 }

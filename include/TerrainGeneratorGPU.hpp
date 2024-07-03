@@ -75,11 +75,14 @@ class TerrainGeneratorGPU
     uint32_t waterVertexCount() const { return waterSizeX_ * waterSizeY_; }
     uint32_t waterFacesCount() const { return 2 * (waterSizeX_ - 1) * (waterSizeY_ - 1); }
 
+    float waterHeight() const { return verticalScale_ * waterHeight_; }
+
   private:
     static constexpr uint32_t maxComputeBlockSize = 1024;
 
     vkw::Device* device_{nullptr};
 
+    static constexpr float waterHeight_ = 0.1f;
     float refDist_{1.0f};
     float terrainResolution_{1.0f};
     float waterResolution_{0.5f};

@@ -21,21 +21,20 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 
 out gl_PerVertex { vec4 gl_Position; };
-layout(location = 0) out vec4 vertexPos;
+layout(location = 0) out vec3 vertexPos;
 layout(location = 1) out vec3 vertexNormal;
 
 layout(binding = 0) uniform Matrices
 {
     mat4 view;
     mat4 proj;
+    mat4 invView;
 }
 mvp;
 
 void main()
 {
-    gl_Position = mvp.proj * mvp.view * vec4(vec3(position.x, position.y, position.z), 1.0f);
-    gl_Position.y = -gl_Position.y;
-
-    vertexNormal = normal;
-    vertexPos = vec4(position, gl_Position.z);
+    gl_Position = mvp.proj * mvp.view * vec4(position, 1.0f);
+    vertexNormal = vec3(mvp.view * vec4(normal, 0.0f));
+    vertexPos = vec3(mvp.view * vec4(position, 1.0f));
 }

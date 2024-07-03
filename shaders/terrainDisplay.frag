@@ -16,31 +16,53 @@
  */
 
 #version 450 core
+#include "lighting.inl"
 
-layout(location = 0) in vec4 vertexPos;
-layout(location = 1) in vec4 vertexColor;
-layout(location = 2) in vec3 vertexNormal;
+layout(location = 0) in vec3 vertexPos;    // In world coordinates
+layout(location = 1) in vec3 vertexNormal; // In world coordinates
+layout(location = 2) in vec4 vertexColor;
 
 layout(location = 0) out vec4 fragColor;
 
-#include "lighting.inl"
+layout(binding = 0) uniform Matrices
+{
+    mat4 view;
+    mat4 proj;
+    mat4 invView;
+}
+mvp;
+
+layout(push_constant) uniform PushConstants
+{
+    mat4 model;
+    vec4 clipPlane;
+    vec4 lightPos;
+    float farDist;
+}
+pcs;
 
 void main()
 {
     const float shininess = 10.0f;
-    const vec3 L = normalize(lightPos - vertexPos.xyz);
-    const vec3 N = normalize(vertexNormal);
-    const vec3 R = reflect(L, N);
-    const vec3 V = normalize(-vertexPos.xyz);
-    float specAngle = max(dot(R, V), 0.0);
-    const float specular = pow(specAngle, shininess);
 
-    const float lambertian = max(dot(N, normalize(lightDir)), 0.0f);
+    const vec3 org = mvp.invView[3].xyz;
+    const vec3 lightPos = vec3(org.xy, 0.0f) + pcs.farDist * pcs.lightPos.xyz;
+    const vec3 v = vec3(mvp.invView * vec4(vertexPos, 1.0f));
+
+    const vec3 N = normalize(vec3(mvp.invView * vec4(vertexNormal, 0.0f)));
+    const vec3 L = normalize(lightPos - v);
+    const vec3 R = reflect(L, N);
+    const vec3 V = normalize(org - v);
+    // Little hack : put -dot to simulate some sun reflection
+    const float alpha = max(-dot(V, R), 0.0f);
+    const float specular = pow(alpha, shininess);
+    const float lambertian = max(dot(N, L), 0.0f);
+
     const vec3 ambiantColor = 0.2f * vertexColor.xyz;
     const vec3 diffuseColor = 0.8f * vertexColor.xyz;
     const vec3 specularColor = 0.1f * vertexColor.xyz;
     const vec3 color = ambiantColor + lambertian * diffuseColor + specular * specularColor;
 
-    const float blurFact = sigm(vertexPos.t - blurDist, 1.0f);
+    const float blurFact = sigm(length(org - v) - pcs.farDist, 1.0f);
     fragColor = vec4(mix(color, horizonColor, blurFact), 1.0f);
 }

@@ -54,11 +54,12 @@ class TerrainEngine
 
     void renderFrame();
 
-    void setOffset(const float offsetX, const float offsetY, const float theta)
+    void setOffset(const float offsetX, const float offsetY, const float theta, const float phi)
     {
         offsetX_ = offsetX;
         offsetY_ = offsetY;
         theta_ = theta;
+        phi_ = phi;
     }
 
   private:
@@ -86,6 +87,7 @@ class TerrainEngine
     {
         alignas(16) glm::mat4 view;
         alignas(16) glm::mat4 proj;
+        alignas(16) glm::mat4 invView;
     };
     std::unique_ptr<vkw::Memory> uboMemory_{nullptr};
     std::vector<vkw::Buffer<MatrixBlock>*> uboBuffers_{};
@@ -105,6 +107,8 @@ class TerrainEngine
     {
         glm::mat4 model;
         glm::vec4 clipPlane;
+        glm::vec4 lightPos;
+        float farDist;
     };
     uint32_t terrainRenderConstantsOffset_;
 
@@ -112,7 +116,8 @@ class TerrainEngine
     {
         float width;
         float height;
-        alignas(16) glm::mat4 view;
+        float farDist;
+        alignas(16) glm::vec4 lightPos;
     };
     uint32_t waterRenderConstantsOffset_;
 
@@ -150,9 +155,12 @@ class TerrainEngine
 
     vkw::Fence graphicsFence_{};
 
+    static constexpr float azimuth_ = 15.0f;
     float offsetX_{0.0f};
     float offsetY_{0.0f};
     float theta_{0.0f};
+    float phi_{0.0f};
+    float h_{6.0f};
 
     void initStorage();
     void initGraphicsPipeline();

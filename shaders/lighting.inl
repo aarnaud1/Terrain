@@ -18,11 +18,8 @@
 #ifndef LIGHTING_INL
 #define LIGHTING_INL
 
-const float blurDist = 35.0f;
+// const float blurDist = 35.0f;
 const vec3 horizonColor = vec3(0.259f, 0.557f, 0.914f);
-const vec3 baseWaterColor = vec3(0.0f, 0.1f, 0.2);
-const vec3 lightPos = vec3(0.0f, 5.0f, 5.0f);
-const vec3 lightDir = vec3(1.0f, 0.0f, 1.0f);
 
 float sigm(const float x, const float alpha) { return 1.0f / (1.0f + exp(-alpha * x)); }
 

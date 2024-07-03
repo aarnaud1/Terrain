@@ -98,8 +98,11 @@ bool decrementX = false;
 bool decrementY = false;
 
 static constexpr float thetaInc = 10.0f;
+static constexpr float phiInc = 10.0f;
+
 double prevX, prevY;
 float theta = 0.0f;
+float phi = 30.0f;
 
 static constexpr float dx = 0.25f;
 static constexpr float dy = 0.25f;
@@ -139,7 +142,7 @@ void mainLoop(GLFWwindow* window, cg::TerrainEngine* engine)
             offsetY -= dy * cosTheta;
         }
 
-        engine->setOffset(offsetX, offsetY, theta);
+        engine->setOffset(offsetX, offsetY, theta, phi);
         engine->renderFrame();
     }
 }
@@ -196,8 +199,10 @@ void mouseCallback(GLFWwindow* window, double xpos, double ypos)
     glfwGetWindowSize(window, &w, &h);
 
     const double dx = (xpos - prevX) / (w / 2);
+    const double dy = (ypos - prevY) / (h / 2);
 
     theta -= thetaInc * float(dx);
+    phi = glm::clamp(phi + phiInc * float(dy), -45.0f, 45.0f);
     prevX = xpos;
     prevY = ypos;
 }

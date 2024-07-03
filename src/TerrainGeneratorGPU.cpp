@@ -253,7 +253,7 @@ void TerrainGeneratorGPU::updateCommandBuffers(
     computeWaterConstants.sizeX = waterSizeX_;
     computeWaterConstants.sizeY = waterSizeY_;
     computeWaterConstants.triangleRes = waterResolution_;
-    computeWaterConstants.zScale = 2.5f;
+    computeWaterConstants.zScale = verticalScale_;
 
     computeWaterCommandBuffer_.reset();
     computeWaterCommandBuffer_.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)

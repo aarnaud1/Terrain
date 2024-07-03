@@ -18,22 +18,23 @@
 #version 450 core
 
 layout(location = 0) in vec3 position;
-layout(location = 1) in vec4 color;
-layout(location = 2) in vec3 normal;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec4 color;
 
 out gl_PerVertex
 {
     vec4 gl_Position;
     float gl_ClipDistance[1];
 };
-layout(location = 0) out vec4 vertexPos;
-layout(location = 1) out vec4 vertexColor;
-layout(location = 2) out vec3 vertexNormal;
+layout(location = 0) out vec3 vertexPos;
+layout(location = 1) out vec3 vertexNormal;
+layout(location = 2) out vec4 vertexColor;
 
 layout(binding = 0) uniform Matrices
 {
     mat4 view;
     mat4 proj;
+    mat4 invView;
 }
 mvp;
 
@@ -41,17 +42,15 @@ layout(push_constant) uniform PushConstants
 {
     mat4 model;
     vec4 clipPlane;
+    float blurDist;
 }
 pcs;
 
 void main()
 {
     gl_ClipDistance[0] = dot(pcs.model * vec4(position, 1.0f), pcs.clipPlane);
-
     gl_Position = mvp.proj * mvp.view * pcs.model * vec4(position, 1.0f);
-    gl_Position.y = -gl_Position.y;
-
-    vertexNormal = normal;
-    vertexPos = vec4(position, gl_Position.z);
+    vertexNormal = vec3(mvp.view * vec4(normal, 0.0f));
+    vertexPos = vec3(mvp.view * vec4(position, 1.0f));
     vertexColor = color;
 }
