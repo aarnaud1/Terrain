@@ -65,7 +65,7 @@ void main()
     const float alpha = max(-dot(V, R), 0.0f);
     const float specular = pow(alpha, shininess);
 
-    const float fact = clamp(dot(V, N), 0.0f, 1.0f);
+    const float fact = clamp(2.0f * dot(V, N), 0.0f, 1.0f);
     const vec3 baseColor = mix(reflectColor, refractColor, fact);
     const vec3 specularColor = vec3(1.0f, 1.0f, 1.0f);
 

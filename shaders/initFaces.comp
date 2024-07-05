@@ -32,15 +32,15 @@ void main()
     const uint sizeX = dimX + 1;
     const uint sizeY = dimY + 1;
 
-    for(uint idx = gl_GlobalInvocationID.x; idx < dimX * dimX;
+    for(uint idx = gl_GlobalInvocationID.x; idx < dimX * dimY;
         idx += gl_WorkGroupSize.x * gl_NumWorkGroups.x)
     {
         const uint i = idx / dimX;
         const uint j = idx % dimX;
 
         const uint baseIndex = i * sizeX + j;
-        const uvec3 face0 = uvec3(baseIndex, baseIndex + sizeX + 1, baseIndex + sizeX);
-        const uvec3 face1 = uvec3(baseIndex, baseIndex + 1, baseIndex + sizeX + 1);
+        const uvec3 face0 = uvec3(baseIndex, baseIndex + sizeX, baseIndex + sizeX + 1);
+        const uvec3 face1 = uvec3(baseIndex, baseIndex + sizeX + 1, baseIndex + 1);
 
         const uint faceOffset = 2 * (i * dimX + j);
         faces[3 * faceOffset + 0] = face0.x;

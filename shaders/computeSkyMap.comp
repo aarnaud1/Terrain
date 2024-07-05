@@ -1,0 +1,158 @@
+/*
+ * Copyright (C) 2024 Adrien ARNAUD
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#version 450 core
+
+#include "noise.inl"
+
+layout(local_size_x_id = 0) in;
+layout(constant_id = 1) const float randomSeed = 0.0f;
+layout(constant_id = 2) const uint mapId = 0;
+
+layout(binding = 0, rgba32f) uniform writeonly image2D noiseMap;
+
+layout(push_constant) uniform PushConstants
+{
+    uint mapSize;
+    uint octaves;
+    float waveLength;
+    float theta;
+};
+
+// For mapping see : https://www.khronos.org/opengl/wiki/Cubemap_Texture
+dvec3 getRay(const uint u, const uint v)
+{
+    const double fullSize = double(mapSize);
+    const double halfSize = 0.5 * double(mapSize);
+
+    // X+ plane
+    if(mapId == 0)
+    {
+        const double x = 1.0;
+        const double y = (fullSize - double(v)) / fullSize;
+        const double z = (fullSize - double(u)) / fullSize;
+        return normalize(dvec3(x, y, z));
+    }
+    // X- plane
+    else if(mapId == 1)
+    {
+        const double x = -1.0;
+        const double y = (fullSize - double(v)) / fullSize;
+        const double z = double(u) / fullSize;
+        return normalize(dvec3(x, y, z));
+    }
+    // Y+ plane
+    else if(mapId == 2)
+    {
+        const double x = (double(u) - halfSize) / halfSize;
+        const double y = 1.0;
+        const double z = double(v) / fullSize;
+        return normalize(dvec3(x, y, z));
+    }
+    // Y- plane
+    else if(mapId == 3)
+    {
+        const double x = (halfSize - double(u)) / halfSize;
+        const double y = -1.0;
+        const double z = double(v) / fullSize;
+        return normalize(dvec3(x, y, z));
+    }
+    // Z+ plane
+    else if(mapId == 4)
+    {
+        const double x = (double(u) - halfSize) / halfSize;
+        const double y = (fullSize - double(v)) / fullSize;
+        const double z = 1.0;
+        return normalize(dvec3(x, y, z));
+    }
+    // Z- plane
+    else if(mapId == 5)
+    {
+        const double x = (halfSize - double(u)) / halfSize;
+        const double y = -double(v) / fullSize;
+        const double z = -1.0;
+        return normalize(dvec3(x, y, z));
+    }
+    else
+    {
+        return dvec3(0.0);
+    }
+}
+
+void main()
+{
+    const vec3 lightDir = normalize(vec3(0.0f, 1.0f, 1.0f));
+    const double height = 1.0;
+    const double eps = 0.01;
+
+    const vec3 skyColor = vec3(0.259f, 0.557f, 0.914f);
+    const vec3 sunColor = vec3(1.0f, 1.0f, 0.8f);
+    const float cosTheta = cos(-theta);
+    const float sinTheta = sin(-theta);
+
+    for(uint idx = gl_GlobalInvocationID.x; idx < mapSize * mapSize;
+        idx += gl_WorkGroupSize.x * gl_NumWorkGroups.x)
+    {
+        const uint u = idx % mapSize;
+        const uint v = idx / mapSize;
+
+        if(mapId < 6)
+        {
+            const dvec3 ray = getRay(u, v);
+            const double cosPhi = dot(ray, dvec3(0.0, 0.0, 1.0));
+            const double l = float(height / cosPhi);
+            const vec3 R = vec3(l * ray);
+            const float x = R.x;
+            const float y = R.y;
+
+            const float alpha = max(dot(vec3(ray), lightDir), 0.0f);
+            const float spec = clamp(pow(alpha, 50.0f), 0.0f, 1.0f);
+            const vec3 bgColor = mix(skyColor, sunColor, spec);
+
+            if(cosPhi < eps)
+            {
+                imageStore(noiseMap, ivec2(u, v), vec4(skyColor, 1.0f));
+            }
+            else
+            {
+                const float X = cosTheta * x + sinTheta * y;
+                const float Y = -sinTheta * x + cosTheta * y;
+
+                float tmp = 0.0f;
+                float amp = 2.0f;
+                float freq = 1.0f / waveLength;
+                float scale = 0.0f;
+                for(uint octave = 0; octave < octaves; ++octave)
+                {
+                    const float tmpHeight = interpolateNoise(
+                        X * freq, (Y + randomSeed) * freq, octave % MAX_PRIME_INDEX);
+                    tmp += amp * tmpHeight;
+                    freq *= 2.0f;
+                    scale += amp;
+                    amp *= 0.5f;
+                }
+                const float val = clamp(tmp + 0.5f, 0.0f, 1.0f);
+                const vec3 color = mix(bgColor, vec3(1.0f), val);
+                imageStore(noiseMap, ivec2(u, v), vec4(color, 1.0f));
+            }
+        }
+        else
+        {
+            imageStore(noiseMap, ivec2(u, v), vec4(skyColor, 1.0f));
+        }
+    }
+}

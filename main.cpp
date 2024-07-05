@@ -74,7 +74,7 @@ int main(int /*argc*/, char** /*argv*/)
 
     std::unique_ptr<cg::TerrainEngine> engine(new cg::TerrainEngine(window, initWidth, initHeight));
     engine->setRefDistance(40.0f);
-    engine->setBaseResolution(0.02f);
+    engine->setBaseResolution(0.025f);
     engine->setFarDistance(40.0f);
     engine->setFov(45.0f);
     engine->setVerticalScale(2.5f);
