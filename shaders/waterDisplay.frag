@@ -68,9 +68,8 @@ void main()
     const float fact = clamp(2.0f * dot(V, N), 0.0f, 1.0f);
     const vec3 baseColor = mix(reflectColor, refractColor, fact);
     const vec3 specularColor = vec3(1.0f, 1.0f, 1.0f);
-
     const vec3 color = baseColor + specular * specularColor;
-    const float blurFact = sigm(length(org - V) - pcs.farDist, 1.0f);
+
+    const float blurFact = sigm(length(org - v) - pcs.farDist, 1.0f);
     fragColor = vec4(mix(color, horizonColor, blurFact), 1.0f);
-    fragColor = vec4(color, 1.0f);
 }

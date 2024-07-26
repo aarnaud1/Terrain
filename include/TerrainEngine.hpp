@@ -103,14 +103,6 @@ class TerrainEngine
     std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> reflectionCommandBuffers_{};
     std::vector<vkw::CommandBuffer<vkw::QueueFamilyType::GRAPHICS>> refractionCommandBuffers_{};
 
-    struct SkyBoxRenderConstants
-    {
-        glm::mat4 model;
-        glm::vec4 clipPlane;
-        glm::vec4 offset;
-    };
-    uint32_t skyBoxRenderConstantsOffset_;
-
     struct TerrainRenderConstants
     {
         glm::mat4 model;
@@ -128,11 +120,6 @@ class TerrainEngine
         alignas(16) glm::vec4 lightPos;
     };
     uint32_t waterRenderConstantsOffset_;
-
-    vkw::PipelineLayout skyBoxLayout_{};
-    vkw::GraphicsPipeline skyBoxOffscreenGraphicsPipeline_{};
-    vkw::GraphicsPipeline skyBoxGraphicsPipeline_{};
-    std::vector<vkw::DescriptorPool> skyBoxDescriptorPools_{};
 
     vkw::PipelineLayout graphicsLayout_{};
     vkw::GraphicsPipeline terrainGraphicsPipeline_{};

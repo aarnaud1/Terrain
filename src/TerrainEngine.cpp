@@ -33,8 +33,8 @@ TerrainEngine::TerrainEngine(
     , generator_{device_}
 {
     const auto deviceFeatures = device_.getFeatures();
-    const bool clipPlaneSupported = deviceFeatures.shaderClipDistance;
-    if(!clipPlaneSupported)
+    const auto clipPlaneSupported = deviceFeatures.shaderClipDistance;
+    if(clipPlaneSupported == VK_FALSE)
     {
         throw std::runtime_error("Clip plane not supported on the selected device");
     }
@@ -92,7 +92,7 @@ void TerrainEngine::renderFrame()
     mvp.view = glm::lookAt(pos0, pos0 + dir0, up);
     // Put 2 * farDistance to be sure to diusplay the skybox
     mvp.proj = glm::perspective(
-        glm::radians(fov_), float(width_) / float(height_), 0.1f, 2.0f * generator_.cubeMapDim());
+        glm::radians(fov_), float(width_) / float(height_), 0.1f, 2.0f * farDistance_);
     mvp.invView = glm::inverse(glm::lookAt(pos1, pos1 + dir1, up));
     uboMemory_->copyFromHost<MatrixBlock>(&mvp, imageIndex * sizeof(MatrixBlock), 1);
 
@@ -204,29 +204,6 @@ void TerrainEngine::initGraphicsPipeline()
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
         .create();
 
-    // Sky box rendering
-    skyBoxLayout_.init(device_, 1);
-    skyBoxLayout_.getDescriptorSetlayoutInfo(0)
-        .addUniformBufferBinding(VK_SHADER_STAGE_ALL, 0, 1)
-        .addSamplerImageBinding(VK_SHADER_STAGE_FRAGMENT_BIT, 1, 1);
-    skyBoxRenderConstantsOffset_ = skyBoxLayout_.addPushConstantRange(
-        VK_SHADER_STAGE_VERTEX_BIT, sizeof(SkyBoxRenderConstants));
-    skyBoxLayout_.create();
-
-    auto initSkyBoxPipeline = [&](auto& pipeline, auto& renderpass) {
-        pipeline.init(device_);
-        pipeline.addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/skyBoxDisplay_vert.spv")
-            .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/skyBoxDisplay_frag.spv")
-            .addVertexBinding(0, sizeof(glm::vec3))
-            .addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
-            .setViewport(0.0f, float(height_), float(width_), -float(height_))
-            .setScissors(0, 0, width_, height_)
-            .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-            .createPipeline(renderpass, skyBoxLayout_);
-    };
-    initSkyBoxPipeline(skyBoxOffscreenGraphicsPipeline_, offscreenRenderpass_);
-    initSkyBoxPipeline(skyBoxGraphicsPipeline_, renderpass_);
-
     // Terrain rendering
     graphicsLayout_.init(device_, 1);
     graphicsLayout_.getDescriptorSetlayoutInfo(0).addUniformBufferBinding(
@@ -334,9 +311,6 @@ void TerrainEngine::allocateUBO(const uint32_t imageCount)
 
 void TerrainEngine::allocateDescriptorPools(const uint32_t imageCount)
 {
-    skyBoxDescriptorPools_.clear();
-    skyBoxDescriptorPools_.resize(imageCount);
-
     terrainDescriptorPools_.clear();
     terrainDescriptorPools_.resize(imageCount);
 
@@ -345,18 +319,6 @@ void TerrainEngine::allocateDescriptorPools(const uint32_t imageCount)
 
     for(uint32_t i = 0; i < imageCount; ++i)
     {
-        // Descriptor pool for skyBox
-        skyBoxDescriptorPools_[i].init(
-            device_, skyBoxLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-        skyBoxDescriptorPools_[i]
-            .bindUniformBuffer(0, 0, uboBuffers_[i]->getFullSizeInfo())
-            .bindSamplerImage(
-                0,
-                1,
-                {generator_.cubeMapSampler().getHandle(),
-                 generator_.cubeMapImageView().getHandle(),
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-
         // Descriptor pool for terrain
         terrainDescriptorPools_[i].init(
             device_, graphicsLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -401,11 +363,6 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             {0.0f, 0.0f, 0.0f, 1.0f}});
         const auto clipPlane = glm::vec4(0.0f, 0.0f, -1.0f, waterHeight);
 
-        SkyBoxRenderConstants skyBoxRenderConstants;
-        skyBoxRenderConstants.model = model;
-        skyBoxRenderConstants.clipPlane = clipPlane;
-        skyBoxRenderConstants.offset = glm::vec4(generator_.cubeMapOffset(), 1.0f);
-
         TerrainRenderConstants terrainRenderConstants;
         terrainRenderConstants.model = model;
         terrainRenderConstants.clipPlane = clipPlane;
@@ -416,44 +373,13 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
 
         auto& cmdBuffer = reflectionCommandBuffers_[i];
         cmdBuffer.begin(VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)
-            .imageMemoryBarrier(
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                vkw::createImageMemoryBarrier(
-                    generator_.cubeMapImage(),
-                    0,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    0,
-                    1,
-                    0,
-                    6))
             .beginRenderPass(
                 offscreenRenderpass_,
                 reflectionFramebuffer_.getHandle(),
                 VkOffset2D{0, 0},
                 reflectionFramebuffer_.getExtent(),
                 clearColor)
-            // Sky box
-            .bindGraphicsPipeline(skyBoxOffscreenGraphicsPipeline_)
-            .setViewport(
-                0,
-                float(swapchain_.getExtent().height),
-                float(swapchain_.getExtent().width),
-                -float(swapchain_.getExtent().height))
-            .setScissor({0, 0}, swapchain_.getExtent())
-            .setCullMode(VK_CULL_MODE_FRONT_BIT)
-            .bindGraphicsDescriptorSets(skyBoxLayout_, skyBoxDescriptorPools_[i])
-            .pushConstants(
-                skyBoxLayout_,
-                VK_SHADER_STAGE_VERTEX_BIT,
-                skyBoxRenderConstantsOffset_,
-                skyBoxRenderConstants)
-            .bindVertexBuffer(0, generator_.cubeMapVertices(), 0)
-            .draw(generator_.cubeMapVertices().getSize(), 1, 0, 0)
-            // Terrain
+            // Terrain -----------------------------------------------------------------------------
             .bindGraphicsPipeline(offscreenGraphicsPipeline_)
             .setViewport(
                 0,
@@ -474,20 +400,6 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             .bindIndexBuffer(generator_.faces(), VK_INDEX_TYPE_UINT32)
             .drawIndexed(3 * faceCount, 1, 0, 0, 0)
             .endRenderPass()
-            .imageMemoryBarrier(
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                vkw::createImageMemoryBarrier(
-                    generator_.cubeMapImage(),
-                    VK_ACCESS_SHADER_WRITE_BIT,
-                    0,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    0,
-                    1,
-                    0,
-                    6))
             .setEvent(
                 reflectionFrameBufferUpdatedEvent_, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
             .end();
@@ -552,11 +464,6 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
         const uint32_t faceCount = generator_.faceCount();
         const uint32_t waterFaceCount = generator_.waterFacesCount();
 
-        SkyBoxRenderConstants skyBoxRenderConstants;
-        skyBoxRenderConstants.model = glm::mat4(1.0f);
-        skyBoxRenderConstants.clipPlane = glm::vec4(0.0f);
-        skyBoxRenderConstants.offset = glm::vec4(generator_.cubeMapOffset(), 1.0f);
-
         TerrainRenderConstants terrainRenderConstants;
         terrainRenderConstants.model = glm::mat4(1.0f);
         terrainRenderConstants.clipPlane = glm::vec4(0.0f);
@@ -589,44 +496,13 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
                 {},
                 {},
                 {})
-            .imageMemoryBarrier(
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                vkw::createImageMemoryBarrier(
-                    generator_.cubeMapImage(),
-                    0,
-                    VK_ACCESS_SHADER_READ_BIT,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    0,
-                    1,
-                    0,
-                    6))
             .beginRenderPass(
                 renderpass_,
                 swapchain_.getFramebuffer(i),
                 VkOffset2D{0, 0},
                 swapchain_.getExtent(),
                 clearColor)
-            // Sky box
-            .bindGraphicsPipeline(skyBoxGraphicsPipeline_)
-            .setViewport(
-                0,
-                float(swapchain_.getExtent().height),
-                float(swapchain_.getExtent().width),
-                -float(swapchain_.getExtent().height))
-            .setScissor({0, 0}, swapchain_.getExtent())
-            .setCullMode(VK_CULL_MODE_BACK_BIT)
-            .bindGraphicsDescriptorSets(skyBoxLayout_, skyBoxDescriptorPools_[i])
-            .pushConstants(
-                skyBoxLayout_,
-                VK_SHADER_STAGE_VERTEX_BIT,
-                skyBoxRenderConstantsOffset_,
-                skyBoxRenderConstants)
-            .bindVertexBuffer(0, generator_.cubeMapVertices(), 0)
-            .draw(generator_.cubeMapVertices().getSize(), 1, 0, 0)
-            // Terrain
+            // Terrain -----------------------------------------------------------------------------
             .bindGraphicsPipeline(terrainGraphicsPipeline_)
             .setViewport(
                 0,
@@ -646,7 +522,7 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             .bindVertexBuffer(2, generator_.colors(), 0)
             .bindIndexBuffer(generator_.faces(), VK_INDEX_TYPE_UINT32)
             .drawIndexed(3 * faceCount, 1, 0, 0, 0)
-            // Water
+            // Water -------------------------------------------------------------------------------
             .bindGraphicsPipeline(waterGraphicsPipeline_)
             .setViewport(
                 0,
@@ -665,20 +541,6 @@ void TerrainEngine::allocateGraphicsCommandBuffers(const uint32_t imageCount)
             .bindIndexBuffer(generator_.waterFaces(), VK_INDEX_TYPE_UINT32)
             .drawIndexed(3 * waterFaceCount, 1, 0, 0, 0)
             .endRenderPass()
-            .imageMemoryBarrier(
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                vkw::createImageMemoryBarrier(
-                    generator_.cubeMapImage(),
-                    VK_ACCESS_SHADER_WRITE_BIT,
-                    0,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_IMAGE_LAYOUT_GENERAL,
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    0,
-                    1,
-                    0,
-                    6))
             .end();
     }
 }
