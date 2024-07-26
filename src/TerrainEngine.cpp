@@ -214,6 +214,9 @@ void TerrainEngine::initGraphicsPipeline()
 
     auto initTerrainPipeline = [&](auto& pipeline, auto& renderpass) {
         pipeline.init(device_);
+        pipeline.viewports()[0]
+            = {0.0f, float(height_), float(width_), -float(height_), 0.0f, 0.0f};
+        pipeline.scissors()[0] = {0, 0, width_, height_};
         pipeline.addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/terrainDisplay_vert.spv")
             .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/terrainDisplay_frag.spv")
             .addVertexBinding(0, sizeof(glm::vec3))
@@ -222,9 +225,6 @@ void TerrainEngine::initGraphicsPipeline()
             .addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
             .addVertexAttribute(1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0)
             .addVertexAttribute(2, 2, VK_FORMAT_R32G32B32A32_SFLOAT, 0)
-            .setViewport(0.0f, float(height_), float(width_), -float(height_))
-            .setScissors(0, 0, width_, height_)
-            .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .createPipeline(renderpass, graphicsLayout_);
     };
     initTerrainPipeline(offscreenGraphicsPipeline_, offscreenRenderpass_);
@@ -241,16 +241,15 @@ void TerrainEngine::initGraphicsPipeline()
     waterLayout_.create();
 
     waterGraphicsPipeline_.init(device_);
+    waterGraphicsPipeline_.viewports()[0] = {0.0f, 0.0f, float(width_), float(height_), 0.0f, 0.0f};
+    waterGraphicsPipeline_.scissors()[0] = {0, 0, width_, height_};
     waterGraphicsPipeline_
         .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/waterDisplay_vert.spv")
         .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/waterDisplay_frag.spv")
         .addVertexBinding(0, sizeof(glm::vec3))
         .addVertexBinding(1, sizeof(glm::vec3))
         .addVertexAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0)
-        .addVertexAttribute(1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0);
-    waterGraphicsPipeline_.setViewport(0.0f, 0.0f, float(width_), float(height_))
-        .setScissors(0, 0, width_, height_)
-        .setPrimitiveType(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+        .addVertexAttribute(1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0)
         .createPipeline(renderpass_, waterLayout_);
 
     swapchain_.init(instance_, device_, renderpass_, width_, height_, colorFormat);
