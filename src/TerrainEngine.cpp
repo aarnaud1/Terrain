@@ -214,9 +214,6 @@ void TerrainEngine::initGraphicsPipeline()
 
     auto initTerrainPipeline = [&](auto& pipeline, auto& renderpass) {
         pipeline.init(device_);
-        pipeline.viewports()[0]
-            = {0.0f, float(height_), float(width_), -float(height_), 0.0f, 0.0f};
-        pipeline.scissors()[0] = {0, 0, width_, height_};
         pipeline.addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/terrainDisplay_vert.spv")
             .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/terrainDisplay_frag.spv")
             .addVertexBinding(0, sizeof(glm::vec3))
@@ -241,8 +238,6 @@ void TerrainEngine::initGraphicsPipeline()
     waterLayout_.create();
 
     waterGraphicsPipeline_.init(device_);
-    waterGraphicsPipeline_.viewports()[0] = {0.0f, 0.0f, float(width_), float(height_), 0.0f, 0.0f};
-    waterGraphicsPipeline_.scissors()[0] = {0, 0, width_, height_};
     waterGraphicsPipeline_
         .addShaderStage(VK_SHADER_STAGE_VERTEX_BIT, "output/spv/waterDisplay_vert.spv")
         .addShaderStage(VK_SHADER_STAGE_FRAGMENT_BIT, "output/spv/waterDisplay_frag.spv")
